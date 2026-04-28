@@ -137,6 +137,12 @@ impl Engine {
                             self.publish(packet);
                             let _ = reply_tx.send(true);
                         }
+
+                        AdminCommand::GetStats(reply_tx) => {
+                            let count = self.client_service.client_count();
+                            let topics = self.topic_service.collect_topics();
+                            let _ = reply_tx.send((count, topics));
+                        }
                     }
                 }
             }

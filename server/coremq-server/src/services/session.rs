@@ -67,6 +67,10 @@ impl SessionService {
             .collect()
     }
 
+    pub fn client_count(&self) -> usize {
+        self.sessions.len()
+    }
+
     pub fn get_paginated(&self, page: usize, size: usize) -> Page<Session> {
         let total_elements = self.sessions.len();
 

@@ -2,7 +2,7 @@ use axum::{Router, http::StatusCode, middleware, response::Html, routing::{delet
 use tower_http::cors::{Any, CorsLayer};
 
 
-use crate::api::{ api_state::ApiState, controllers::{sessions, listeners, users, topics}, auth};
+use crate::api::{ api_state::ApiState, controllers::{sessions, listeners, users, topics, metrics}, auth};
 
 pub struct  RouterHandler {}
 
@@ -19,6 +19,7 @@ impl RouterHandler  {
         .nest("/api/v1/public", self.auth_routes())
         .route("/api/v1/listeners", get(listeners::get_listeners))
         .route("/api/v1/listeners/:port", delete(listeners::stop_listener))
+        .route("/api/v1/ws/metrics", get(metrics::ws_metrics))
         .fallback(not_found)
         .layer(middleware::from_fn_with_state( state.clone(),  auth::casbin::auth_middleware))
         .layer(self.cors())
