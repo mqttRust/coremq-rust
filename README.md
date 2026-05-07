@@ -81,6 +81,7 @@ CoreMQ exposes REST endpoints on port `18083`:
 | `DELETE` | `/api/v1/listeners/:port` | Stop a listener |
 | `GET` | `/api/v1/topics` | List all active topics with subscriber counts |
 | `POST` | `/api/v1/publish` | Publish a message to a topic via HTTP |
+| `GET` (WS) | `/api/v1/ws/metrics` | Stream real-time broker metrics every 1 second |
 
 ---
 
@@ -224,6 +225,13 @@ mqtt.connect("ws://localhost:8083/mqtt", {
 });
 ```
 
+### WebSocket Metrics Stream
+```javascript
+const ws = new WebSocket("ws://localhost:18083/api/v1/ws/metrics");
+ws.onmessage = (e) => console.log(JSON.parse(e.data));
+// {"timestamp":"...","memory_mb":42.1,"cpu_percent":0.8,"client_count":317,"topics":[...]}
+```
+
 ### REST Publish
 ```bash
 # Login first
@@ -269,6 +277,7 @@ curl -X POST http://localhost:18083/api/v1/publish \
 - Persistent storage engine
 - Distributed mode
 - Plugin system
+- WebSocket metrics endpoint (`/api/v1/ws/metrics`) — real-time memory, CPU, client count, topics
 - Prometheus metrics exporter
 - Retained message management
 - ACL-based topic permissions
