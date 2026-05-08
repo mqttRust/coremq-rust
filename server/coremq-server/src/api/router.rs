@@ -1,81 +1,64 @@
-use axum::{Router, http::StatusCode, middleware, response::Html, routing::{delete, get, post}};
+use axum::{Router, middleware, routing::{delete, get, post}};
 use tower_http::cors::{Any, CorsLayer};
 
+use crate::api::{
+    api_state::ApiState,
+    controllers::{sessions, listeners, users, topics, metrics, static_files},
+    auth,
+};
 
-use crate::api::{ api_state::ApiState, controllers::{sessions, listeners, users, topics, metrics}, auth};
+pub struct RouterHandler {}
 
-pub struct  RouterHandler {}
-
-impl RouterHandler  {
+impl RouterHandler {
     pub fn new() -> Self {
-        RouterHandler {  }
+        RouterHandler {}
     }
 
     pub fn create_router(&self, state: ApiState) -> Router {
+        // Protected API routes — auth middleware applied only to these
+        let protected = Router::new()
+            .nest("/api/v1", self.get_session_routes())
+            .nest("/api/v1", self.get_user_routes())
+            .nest("/api/v1", self.get_topic_routes())
+            .route("/api/v1/listeners", get(listeners::get_listeners))
+            .route("/api/v1/listeners/:port", delete(listeners::stop_listener))
+            .route("/api/v1/ws/metrics", get(metrics::ws_metrics))
+            .layer(middleware::from_fn_with_state(state.clone(), auth::casbin::auth_middleware));
+
         Router::new()
-        .nest("/api/v1", self.get_session_routes())
-        .nest("/api/v1", self.get_user_routes())
-        .nest("/api/v1", self.get_topic_routes())
-        .nest("/api/v1/public", self.auth_routes())
-        .route("/api/v1/listeners", get(listeners::get_listeners))
-        .route("/api/v1/listeners/:port", delete(listeners::stop_listener))
-        .route("/api/v1/ws/metrics", get(metrics::ws_metrics))
-        .fallback(not_found)
-        .layer(middleware::from_fn_with_state( state.clone(),  auth::casbin::auth_middleware))
-        .layer(self.cors())
-        .with_state(state)
-        
+            .merge(protected)
+            // Public auth routes — no middleware
+            .nest("/api/v1/public", self.auth_routes())
+            // Embedded React SPA — fallback serves index.html for client-side routing
+            .fallback(static_files::spa_handler)
+            .layer(self.cors())
+            .with_state(state)
     }
 
     pub fn auth_routes(&self) -> Router<ApiState> {
-        Router::new()
-        .route("/login", post(users::login))
+        Router::new().route("/login", post(users::login))
     }
 
     pub fn get_session_routes(&self) -> Router<ApiState> {
         Router::new()
-        .route("/sessions", get(sessions::get_sessions))
-        .route("/sessions/:client_id", delete(sessions::disconnect_session))
+            .route("/sessions", get(sessions::get_sessions))
+            .route("/sessions/:client_id", delete(sessions::disconnect_session))
     }
 
     pub fn get_user_routes(&self) -> Router<ApiState> {
-        Router::new()
-        .route("/users", post(users::create_user).get(users::get_all_users) )
+        Router::new().route("/users", post(users::create_user).get(users::get_all_users))
     }
 
     pub fn get_topic_routes(&self) -> Router<ApiState> {
         Router::new()
-        .route("/topics", get(topics::get_topics))
-        .route("/publish", post(topics::publish_message))
+            .route("/topics", get(topics::get_topics))
+            .route("/publish", post(topics::publish_message))
     }
 
-     fn cors(&self) -> CorsLayer {
+    fn cors(&self) -> CorsLayer {
         CorsLayer::new()
             .allow_origin(Any)
             .allow_methods(Any)
             .allow_headers(Any)
     }
-}
-
-
-
-async fn not_found() -> impl axum::response::IntoResponse {
-    let html = r#"
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>404 - Not Found</title>
-            <style>
-                body { font-family: Arial; text-align: center; margin-top: 100px; }
-                h1 { font-size: 48px; color: #e74c3c; }
-            </style>
-        </head>
-        <body>
-            <h1>404</h1>
-            <p>Page not found</p>
-        </body>
-        </html>
-    "#;
-
-    (StatusCode::NOT_FOUND, Html(html))
 }

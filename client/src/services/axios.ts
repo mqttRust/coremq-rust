@@ -10,8 +10,10 @@ const TOKEN_KEYS = {
 /** Cookie options */
 const COOKIE_OPTIONS = { path: '/' } as const;
 
-/** API base URL derived from current hostname */
-const API_BASE = `http://${window.location.hostname}:18083`;
+/** API base URL — same origin when served from the Rust binary, explicit when using dev server */
+const API_BASE = window.location.port === '3039'
+    ? `http://${window.location.hostname}:18083`
+    : window.location.origin;
 
 /** Axios instance for all API calls */
 export const api = axios.create({ baseURL: API_BASE });

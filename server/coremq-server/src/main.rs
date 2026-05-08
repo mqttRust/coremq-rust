@@ -32,9 +32,11 @@ async fn main() -> anyhow::Result<()> {
         Err(e) => { panic!("Failed to create enforcer: {}", e)}
     };
 
-    let path = "data/coremq.redb";
-    let _ = std::fs::create_dir_all("data");
-    let db = match pkg::db::new(path) {
+    let data_dir = std::env::var("COREMQ_DATA")
+        .unwrap_or_else(|_| "/etc/coremq/data".to_string());
+    let _ = std::fs::create_dir_all(&data_dir);
+    let path = format!("{}/coremq.redb", data_dir);
+    let db = match pkg::db::new(&path) {
         Ok(db) => db,
         Err(e) => { panic!("Failed to create database: {}", e)}
     };

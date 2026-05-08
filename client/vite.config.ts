@@ -26,6 +26,10 @@ export default defineConfig({
       },
     ],
   },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+  },
   server: { port: PORT, host: true },
   preview: { port: PORT, host: true },
 });

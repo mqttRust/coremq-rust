@@ -178,36 +178,53 @@ All transports and the REST API communicate with the engine through async mpsc c
 
 ## Installation
 
-```bash
-git clone https://github.com/otabek05/coremq.git
-cd coremq
-cargo build --release
-```
+> Detailed guides: [Linux](docs/install-linux.md) · [macOS](docs/install-macos.md) · [Windows](docs/install-windows.md)
 
-Run the broker:
+### Docker (quickest)
 
 ```bash
-cargo run
+git clone https://github.com/mqttRust/coremq-rust.git
+cd coremq-rust
+docker compose up -d
 ```
 
-Run the dashboard (in a separate terminal):
+Dashboard: http://localhost:18083 — default credentials: `admin` / `public`
+
+### Build from source
 
 ```bash
-cd client
-npm install
-npm run dev
+# Prerequisites: Rust 1.83+, Node.js 20+, Yarn
+git clone https://github.com/mqttRust/coremq-rust.git
+cd coremq-rust
+
+make build           # builds React → embeds into Rust binary
+make install-config  # copies config to /etc/coremq/
+sudo ./target/release/coremq-server
 ```
 
-Default ports:
+### Development (hot-reload)
+
+```bash
+make install   # install Node deps
+make dev       # React on :3039, Rust API on :18083 — both hot-reload
+```
+
+### Default ports
 
 | Service | Port |
 |---------|------|
+| Dashboard + REST API | `18083` |
 | MQTT TCP | `1883` |
+| MQTT WebSocket | `8083` |
 | MQTT TLS | `8883` |
-| WebSocket | `8083` |
-| REST API + Dashboard | `18083` |
 
-Default admin credentials: `admin` / `public`
+### Config & data locations
+
+| Path | Description |
+|------|-------------|
+| `/etc/coremq/config.yaml` | Main config (Linux/macOS) |
+| `/etc/coremq/data/` | ReDB database |
+| `C:\ProgramData\CoreMQ\` | Config root (Windows) |
 
 ---
 
