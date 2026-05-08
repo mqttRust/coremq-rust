@@ -20,6 +20,7 @@ pub async fn auth_middleware(
     println!("Incoming request: {} {}", method, path);
     if path.starts_with("/api/v1/public")
         || path.starts_with("/api/v1/auth")
+        || path.starts_with("/api/v1/ws")
         || req.method() == http::Method::OPTIONS
     {
         return next.run(req).await;

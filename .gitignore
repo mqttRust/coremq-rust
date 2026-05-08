@@ -24,3 +24,7 @@ client/tsconfig.tsbuildinfo
 # OS / Editor
 .DS_Store
 .vscode
+
+# Root-level markdown except README
+/*.md
+!README.md

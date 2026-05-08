@@ -1,0 +1,19 @@
+services:
+  coremq:
+    build: .
+    image: coremq:latest
+    container_name: coremq
+    restart: unless-stopped
+    ports:
+      - "18083:18083"   # Admin dashboard + REST API
+      - "1883:1883"     # MQTT TCP
+      - "8083:8083"     # MQTT WebSocket
+      - "8883:8883"     # MQTT TLS (optional)
+    volumes:
+      - coremq_data:/etc/coremq
+    environment:
+      - COREMQ_CONFIG=/etc/coremq/config.yaml
+
+volumes:
+  coremq_data:
+    driver: local

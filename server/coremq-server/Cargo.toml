@@ -29,3 +29,6 @@ casbin = "2.20.0"
 argon2 = "0.5"
 password-hash = "0.5"
 rand_core = "0.6"
+sysinfo = { version = "0.29", default-features = false }
+rust-embed = { version = "8", features = ["compression"] }
+mime_guess = "2"

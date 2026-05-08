@@ -41,4 +41,9 @@ pub enum AdminCommand {
       Publishes a message and replies with success status.
     */
     PublishMessage(PublishPacket, oneshot::Sender<bool>),
+
+    /*
+      Returns broker stats: (client_count, active_topics).
+    */
+    GetStats(oneshot::Sender<(usize, Vec<TopicInfo>)>),
 }

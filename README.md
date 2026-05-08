@@ -81,6 +81,7 @@ CoreMQ exposes REST endpoints on port `18083`:
 | `DELETE` | `/api/v1/listeners/:port` | Stop a listener |
 | `GET` | `/api/v1/topics` | List all active topics with subscriber counts |
 | `POST` | `/api/v1/publish` | Publish a message to a topic via HTTP |
+| `GET` (WS) | `/api/v1/ws/metrics` | Stream real-time broker metrics every 1 second |
 
 ---
 
@@ -177,36 +178,53 @@ All transports and the REST API communicate with the engine through async mpsc c
 
 ## Installation
 
-```bash
-git clone https://github.com/otabek05/coremq.git
-cd coremq
-cargo build --release
-```
+> Detailed guides: [Linux](docs/install-linux.md) · [macOS](docs/install-macos.md) · [Windows](docs/install-windows.md)
 
-Run the broker:
+### Docker (quickest)
 
 ```bash
-cargo run
+git clone https://github.com/mqttRust/coremq-rust.git
+cd coremq-rust
+docker compose up -d
 ```
 
-Run the dashboard (in a separate terminal):
+Dashboard: http://localhost:18083 — default credentials: `admin` / `public`
+
+### Build from source
 
 ```bash
-cd client
-npm install
-npm run dev
+# Prerequisites: Rust 1.83+, Node.js 20+, Yarn
+git clone https://github.com/mqttRust/coremq-rust.git
+cd coremq-rust
+
+make build           # builds React → embeds into Rust binary
+make install-config  # copies config to /etc/coremq/
+sudo ./target/release/coremq-server
 ```
 
-Default ports:
+### Development (hot-reload)
+
+```bash
+make install   # install Node deps
+make dev       # React on :3039, Rust API on :18083 — both hot-reload
+```
+
+### Default ports
 
 | Service | Port |
 |---------|------|
+| Dashboard + REST API | `18083` |
 | MQTT TCP | `1883` |
+| MQTT WebSocket | `8083` |
 | MQTT TLS | `8883` |
-| WebSocket | `8083` |
-| REST API + Dashboard | `18083` |
 
-Default admin credentials: `admin` / `public`
+### Config & data locations
+
+| Path | Description |
+|------|-------------|
+| `/etc/coremq/config.yaml` | Main config (Linux/macOS) |
+| `/etc/coremq/data/` | ReDB database |
+| `C:\ProgramData\CoreMQ\` | Config root (Windows) |
 
 ---
 
@@ -222,6 +240,13 @@ mosquitto_sub -h localhost -p 1883 -t test/topic
 mqtt.connect("ws://localhost:8083/mqtt", {
   protocol: "mqtt"
 });
+```
+
+### WebSocket Metrics Stream
+```javascript
+const ws = new WebSocket("ws://localhost:18083/api/v1/ws/metrics");
+ws.onmessage = (e) => console.log(JSON.parse(e.data));
+// {"timestamp":"...","memory_mb":42.1,"cpu_percent":0.8,"client_count":317,"topics":[...]}
 ```
 
 ### REST Publish
@@ -269,6 +294,7 @@ curl -X POST http://localhost:18083/api/v1/publish \
 - Persistent storage engine
 - Distributed mode
 - Plugin system
+- WebSocket metrics endpoint (`/api/v1/ws/metrics`) — real-time memory, CPU, client count, topics
 - Prometheus metrics exporter
 - Retained message management
 - ACL-based topic permissions
