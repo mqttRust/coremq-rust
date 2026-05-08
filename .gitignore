@@ -29,6 +29,5 @@ client/tsconfig.tsbuildinfo
 /*.md
 !README.md
 
-# Local issue and PR notes
-/issue/
+# Local PR notes
 /pr/
