@@ -28,3 +28,6 @@ client/tsconfig.tsbuildinfo
 # Root-level markdown except README
 /*.md
 !README.md
+
+# Local PR notes
+/pr/
