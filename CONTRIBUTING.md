@@ -78,7 +78,7 @@ Issues that don't meet this bar may be closed without a reply. Reopen after you'
    - Frontend pages are thin wrappers; logic lives in `sections/<feature>/<feature>_view.tsx`.
    - Zustand stores split `State` and `Actions`, share an `initialState`, and expose `reset()`.
    - Theme tokens via `sx`, never hardcoded colors (the one exception is drawer `bgcolor: '#131825'`).
-   - Every user-facing string is `t('key')` and the key must exist in `client/src/118n/{en,ko,uz}.json`.
+   - Every user-facing string is `t('key')` and the key must exist in `client/src/i18n/{en,ko,uz}.json`.
 3. **Run the verification suite** (full output, no tail; fix everything):
 
    ```bash
