@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: dev server client install build build-client build-server setup fmt lint fix docker-build docker-up docker-down
+.PHONY: dev server client install build build-client build-server setup fmt lint fix docker-build docker-run docker-stop docker-logs docker-rm
 
 # ── Development ──────────────────────────────────────────────────────────────
 
@@ -36,14 +36,26 @@ build-server:
 docker-build:
 	docker build -t coremq:latest .
 
-docker-up:
-	docker compose up -d
+docker-run:
+	docker run -d \
+		--name coremq \
+		--restart unless-stopped \
+		-p 18083:18083 \
+		-p 1883:1883 \
+		-p 8083:8083 \
+		-p 8883:8883 \
+		-v coremq_data:/etc/coremq \
+		-e COREMQ_CONFIG=/etc/coremq/config.yaml \
+		coremq:latest
 
-docker-down:
-	docker compose down
+docker-stop:
+	docker stop coremq
+
+docker-rm: docker-stop
+	docker rm coremq
 
 docker-logs:
-	docker compose logs -f coremq
+	docker logs -f coremq
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 

@@ -11,18 +11,41 @@ Tested on Ubuntu 22.04+ and Debian 12. Adapt paths for other distros.
 git clone https://github.com/mqttRust/coremq-rust.git
 cd coremq-rust
 
-# 2. Build and start
-docker compose up -d
+# 2. Build the image
+docker build -t coremq:latest .
 
-# 3. Open the dashboard
+# 3. Run the container
+docker run -d \
+  --name coremq \
+  --restart unless-stopped \
+  -p 18083:18083 \
+  -p 1883:1883 \
+  -p 8083:8083 \
+  -p 8883:8883 \
+  -v coremq_data:/etc/coremq \
+  -e COREMQ_CONFIG=/etc/coremq/config.yaml \
+  coremq:latest
+
+# 4. Open the dashboard
 xdg-open http://localhost:18083
 ```
 
 Default credentials: `admin` / `public`
 
-To view logs:
+**Useful commands:**
 ```bash
-docker compose logs -f coremq
+docker logs -f coremq        # follow logs
+docker stop coremq           # stop
+docker start coremq          # restart
+docker rm coremq             # remove container
+```
+
+Or use the Makefile shortcuts:
+```bash
+make docker-build   # build image
+make docker-run     # start container
+make docker-stop    # stop
+make docker-logs    # follow logs
 ```
 
 ---

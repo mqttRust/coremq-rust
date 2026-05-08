@@ -12,12 +12,33 @@ Tested on macOS 13 Ventura and 14 Sonoma (Apple Silicon + Intel).
 git clone https://github.com/mqttRust/coremq-rust.git
 cd coremq-rust
 
-docker compose up -d
+# Build the image
+docker build -t coremq:latest .
+
+# Run the container
+docker run -d \
+  --name coremq \
+  --restart unless-stopped \
+  -p 18083:18083 \
+  -p 1883:1883 \
+  -p 8083:8083 \
+  -p 8883:8883 \
+  -v coremq_data:/etc/coremq \
+  -e COREMQ_CONFIG=/etc/coremq/config.yaml \
+  coremq:latest
 
 open http://localhost:18083
 ```
 
 Default credentials: `admin` / `public`
+
+**Useful commands:**
+```bash
+docker logs -f coremq        # follow logs
+docker stop coremq           # stop
+docker start coremq          # restart
+docker rm coremq             # remove container
+```
 
 ---
 

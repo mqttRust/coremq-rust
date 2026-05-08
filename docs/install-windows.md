@@ -13,12 +13,33 @@ Tested on Windows 10 (22H2) and Windows 11. Run all commands in **PowerShell as 
 git clone https://github.com/mqttRust/coremq-rust.git
 cd coremq-rust
 
-docker compose up -d
+# Build the image
+docker build -t coremq:latest .
+
+# Run the container
+docker run -d `
+  --name coremq `
+  --restart unless-stopped `
+  -p 18083:18083 `
+  -p 1883:1883 `
+  -p 8083:8083 `
+  -p 8883:8883 `
+  -v coremq_data:/etc/coremq `
+  -e COREMQ_CONFIG=/etc/coremq/config.yaml `
+  coremq:latest
 ```
 
 Open the dashboard: http://localhost:18083
 
 Default credentials: `admin` / `public`
+
+**Useful commands:**
+```powershell
+docker logs -f coremq        # follow logs
+docker stop coremq           # stop
+docker start coremq          # restart
+docker rm coremq             # remove container
+```
 
 ---
 
