@@ -2,7 +2,7 @@
   "name": "coremq-dashboard",
   "author": "",
   "licence": "MIT",
-  "version": "3.0.0",
+  "version": "0.1.0",
   "private": false,
   "type": "module",
   "scripts": {

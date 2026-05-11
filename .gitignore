@@ -25,9 +25,12 @@ client/tsconfig.tsbuildinfo
 .DS_Store
 .vscode
 
-# Root-level markdown except README
+# Root-level markdown — only README and canonical project docs are tracked
 /*.md
 !README.md
+!AGENTS.md
+!CONTRIBUTING.md
+!CHANGELOG.md
 
 # Local PR notes
 /pr/
