@@ -1,310 +1,245 @@
-# CoreMQ
+# Plexus
 
-**CoreMQ** is a high-performance MQTT broker written in Rust using async Tokio.
-It is designed for scalability, reliability, and modern cloud-native deployments.
+A high-performance MQTT broker written in async Rust.
 
----
+Plexus runs the protocol layer (TCP, TLS, WebSocket), the management layer (REST API, embedded admin dashboard), and the persistence layer (ReDB) in a single binary. All transports route through one Tokio-driven engine over async channels — the same model that gives the project its name.
 
-## Overview
-
-CoreMQ provides a fully asynchronous MQTT broker implementation with support for:
-
-- Native TCP MQTT connections
-- MQTT over WebSocket
-- TLS encrypted communication
-- REST API management
-- Web-based admin dashboard
-- Built-in authentication & database (ReDB)
-- Role-based access control (Casbin RBAC)
-- Topic monitoring & REST publish
-- Multi-language dashboard (EN, KO, UZ)
-
-Built with:
-
-- Rust
-- Tokio (async runtime)
-- Axum (REST & WebSocket)
-- ReDB (embedded database)
-- Casbin (RBAC authorization)
-- React + Material-UI (dashboard)
+> Status: `0.1.0` · MQTT 3.1.1 · QoS 0 in production, QoS 1/2 wiring in progress.
 
 ---
 
-## Features
+## At a glance
 
-### MQTT Protocol Support
-- MQTT 3.1.1 compliant
-- TCP connections (default: `1883`)
-- Secure TLS connections (`8883`)
-- WebSocket MQTT (`/mqtt` on port `8083`)
-- Ping / KeepAlive handling
-- Publish / Subscribe / Unsubscribe
-- Wildcard topic matching (`+` and `#`)
-- QoS 0 (expandable to QoS 1/2)
+- **Async, single-binary broker** — Tokio engine, mpsc command bus, no external services required.
+- **Multi-transport** — plain TCP (`1883`), TLS (`8883`), MQTT-over-WebSocket (`/mqtt` on `8083`), WSS.
+- **Built-in REST API** — sessions, topics, users, listeners, publish, real-time metrics stream.
+- **Embedded admin dashboard** — React + Material-UI, served on port `18083` from the broker binary itself.
+- **Auth out of the box** — Argon2 password hashing, JWT access + refresh tokens, Casbin RBAC.
+- **Embedded storage** — ReDB. No external Postgres/Redis to operate.
+- **i18n dashboard** — English, Korean, Uzbek.
 
 ---
 
-### Multi-Transport Support
-CoreMQ supports:
+## Quick start (Docker)
 
-- Native TCP
-- TLS over TCP
-- MQTT over WebSocket
-- Secure WebSocket (WSS)
-
-All transports share a unified async engine.
-
----
-
-### Authentication & Authorization
-
-- Built-in user database (ReDB)
-- Username & password validation (Argon2 hashing)
-- JWT access & refresh tokens
-- Casbin role-based access control (Admin / User roles)
-- Middleware-based route protection
-
----
-
-### REST API
-
-CoreMQ exposes REST endpoints on port `18083`:
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/v1/public/login` | User login (returns JWT tokens) |
-| `GET` | `/api/v1/sessions` | List connected clients (paginated) |
-| `DELETE` | `/api/v1/sessions/:client_id` | Force disconnect a client |
-| `GET` | `/api/v1/users` | List all users |
-| `POST` | `/api/v1/users` | Create a new user |
-| `GET` | `/api/v1/listeners` | List active listeners |
-| `DELETE` | `/api/v1/listeners/:port` | Stop a listener |
-| `GET` | `/api/v1/topics` | List all active topics with subscriber counts |
-| `POST` | `/api/v1/publish` | Publish a message to a topic via HTTP |
-| `GET` (WS) | `/api/v1/ws/metrics` | Stream real-time broker metrics every 1 second |
-
----
-
-### Topic Monitoring & REST Publish
-
-CoreMQ provides full topic visibility and REST-based message publishing:
-
-- **Topic listing** — View all active topics with real-time subscriber counts
-- **REST publish** — Send messages to any topic directly from the admin dashboard or via HTTP API without needing an MQTT client connection
-
-**Why this matters:**
-- IoT fleet operators can send commands to devices directly from the dashboard
-- Developers can test subscriptions without setting up an MQTT client
-- Monitoring teams can see which topics are active and how many subscribers each has
-- Integrations can publish via simple HTTP POST instead of maintaining MQTT connections
-
-**REST Publish example:**
 ```bash
-curl -X POST http://localhost:18083/api/v1/publish \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"topic": "devices/sensor/temperature", "payload": "{\"temp\": 23.5}", "qos": 0, "retain": false}'
+git clone https://github.com/mqttRust/coremq-rust.git plexus
+cd plexus
+docker compose up -d
 ```
 
-**Topics API example:**
+Dashboard: http://localhost:18083 — default credentials `admin` / `public`. Change them before exposing the broker.
+
+## Build from source
+
+Prerequisites: Rust 1.83+, Node.js 20+, Yarn.
+
 ```bash
-curl http://localhost:18083/api/v1/topics \
-  -H "Authorization: Bearer <token>"
+git clone https://github.com/mqttRust/coremq-rust.git plexus
+cd plexus
+
+make build            # builds the React dashboard, embeds it in the Rust binary
+make install-config   # copies default config to /etc/coremq/  (Linux/macOS)
+sudo ./target/release/coremq-server
 ```
 
-Response:
-```json
-{
-  "status_code": 200,
-  "message": "successfully fetched topics",
-  "data": [
-    { "topic": "devices/sensor/temperature", "subscriber_count": 3 },
-    { "topic": "home/livingroom/light", "subscriber_count": 1 }
-  ]
-}
+Detailed install guides: [Linux](docs/install-linux.md) · [macOS](docs/install-macos.md) · [Windows](docs/install-windows.md).
+
+## Development (hot reload)
+
+```bash
+make install   # install frontend deps
+make dev       # React on :3039, Rust on :18083 — both hot-reload
 ```
 
----
-
-### Admin Dashboard
-
-A built-in web dashboard (React + Material-UI) running on port `18083`:
-
-- **Home** — Overview analytics
-- **Sessions** — Connected clients monitoring, search, disconnect
-- **Topics** — Active topics with subscriber counts, publish messages to any topic
-- **Listeners** — Active listener management
-- **WebSocket Client** — Built-in MQTT WebSocket client for testing
-- **Webhooks** — Webhook management (coming soon)
-- **Admin** — User management (create, list, role assignment)
-- **Authentication** — JWT login with token refresh
-- **Multi-language** — English, Korean, Uzbek
+> The crate is currently published as `coremq-server` and the dashboard as `coremq-dashboard`. The package and binary rename to `plexus` will land in a follow-up.
 
 ---
 
 ## Architecture
 
-CoreMQ is built around a unified async engine with channel-based communication:
-
 ```
-                    ┌──────────────────────────────┐
-                    │         Admin Dashboard       │
-                    │     (React + Material-UI)     │
-                    └──────────────┬───────────────┘
-                                   │ HTTP (port 18083)
-                    ┌──────────────▼───────────────┐
-                    │       REST API (Axum)         │
-                    │  Sessions │ Topics │ Users    │
-                    │  Listeners│Publish │ Auth     │
-                    └──────────────┬───────────────┘
-                                   │ mpsc channels
-                    ┌──────────────▼───────────────┐
-                    │        Engine (Tokio)         │
-                    │   ┌─────────┐ ┌───────────┐  │
-                    │   │ Session │ │   Topic   │  │
-                    │   │ Service │ │  Service  │  │
-                    │   └─────────┘ └───────────┘  │
-                    └──┬─────────┬─────────┬───────┘
-                       │         │         │
-               ┌───────▼──┐ ┌───▼────┐ ┌──▼────────┐
-               │  TCP      │ │  TLS   │ │ WebSocket │
-               │ (1883)    │ │ (8883) │ │  (8083)   │
-               └───────────┘ └────────┘ └───────────┘
+                   ┌───────────────────────────────┐
+                   │       Admin Dashboard         │
+                   │     (React + Material-UI)     │
+                   └───────────────┬───────────────┘
+                                   │ HTTP / WS  (port 18083)
+                   ┌───────────────▼───────────────┐
+                   │         REST API (Axum)       │
+                   │  sessions │ topics │ users    │
+                   │  listeners│ publish│ auth     │
+                   └───────────────┬───────────────┘
+                                   │ async mpsc + oneshot reply
+                   ┌───────────────▼───────────────┐
+                   │         Engine (Tokio)        │
+                   │   ┌─────────┐ ┌───────────┐   │
+                   │   │ Session │ │   Topic   │   │
+                   │   │ Service │ │  Service  │   │
+                   │   └─────────┘ └───────────┘   │
+                   └─────┬─────────┬─────────┬─────┘
+                         │         │         │
+                  ┌──────▼──┐ ┌────▼───┐ ┌───▼──────┐
+                  │   TCP   │ │  TLS   │ │ WebSocket│
+                  │  (1883) │ │ (8883) │ │  (8083)  │
+                  └─────────┘ └────────┘ └──────────┘
 ```
 
-All transports and the REST API communicate with the engine through async mpsc channels. The engine processes commands (Connect, Disconnect, Subscribe, Unsubscribe, Publish, GetTopics, etc.) in a single event loop.
+Transports and the REST API never share state directly. Every operation (`Connect`, `Subscribe`, `Publish`, `GetTopics`, …) is sent as an `AdminCommand` or `PubSubCommand` to the engine over an mpsc channel; the reply comes back via a `oneshot`. The engine's event loop is single-threaded by design — it removes the lock contention that traditional broker architectures pay for, and makes the in-memory state machine easy to reason about.
 
 ---
 
-## Installation
+## Features
 
-> Detailed guides: [Linux](docs/install-linux.md) · [macOS](docs/install-macos.md) · [Windows](docs/install-windows.md)
+### MQTT protocol
 
-### Docker (quickest)
+MQTT 3.1.1, with publish / subscribe / unsubscribe, ping / keepalive, and wildcard topic matching (`+` single-level, `#` multi-level). QoS 0 is fully supported in production. QoS 1/2 packet handling exists; reliable delivery wiring is in progress.
+
+### Transports
+
+Plain TCP, TLS over TCP, MQTT over WebSocket, and Secure WebSocket (WSS). All four share the same engine, the same auth, and the same session model — picking a transport is a deployment choice, not a feature gate.
+
+### Authentication & authorization
+
+User database in ReDB. Passwords are stored as Argon2 hashes. Login returns a short-lived JWT access token and a refresh token. The REST API is protected by middleware that validates the bearer and runs a Casbin RBAC check for every request. Default roles: `admin` and `user`.
+
+### REST API
+
+| Method     | Endpoint                            | Description                                          |
+| ---------- | ----------------------------------- | ---------------------------------------------------- |
+| `POST`     | `/api/v1/public/login`              | Log in, return JWT access + refresh tokens           |
+| `GET`      | `/api/v1/sessions`                  | List connected clients (paginated)                   |
+| `DELETE`   | `/api/v1/sessions/:client_id`       | Force-disconnect a client                            |
+| `GET`      | `/api/v1/users`                     | List users                                           |
+| `POST`     | `/api/v1/users`                     | Create a user                                        |
+| `GET`      | `/api/v1/listeners`                 | List active listeners                                |
+| `DELETE`   | `/api/v1/listeners/:port`           | Stop a listener                                      |
+| `GET`      | `/api/v1/topics`                    | List active topics with subscriber counts            |
+| `POST`     | `/api/v1/publish`                   | Publish a message to a topic over HTTP               |
+| `GET (WS)` | `/api/v1/ws/metrics`                | Stream broker metrics every 1s (mem, CPU, sessions)  |
+
+### Topic monitoring & REST publish
+
+`GET /api/v1/topics` returns every active topic with its subscriber count. `POST /api/v1/publish` sends a message to any topic without an MQTT client connection. Together they cover three operational needs that MQTT alone makes awkward:
+
+- IoT operators sending commands to fleets from a browser.
+- Developers driving a subscription manually without spinning up a client.
+- HTTP-only systems integrating with the broker without a long-lived MQTT connection.
 
 ```bash
-git clone https://github.com/mqttRust/coremq-rust.git
-cd coremq-rust
-docker compose up -d
+# Publish over HTTP
+curl -X POST http://localhost:18083/api/v1/publish \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"topic": "devices/sensor/temperature", "payload": "{\"temp\":23.5}", "qos": 0, "retain": false}'
+
+# List active topics
+curl -H "Authorization: Bearer $TOKEN" http://localhost:18083/api/v1/topics
 ```
 
-Dashboard: http://localhost:18083 — default credentials: `admin` / `public`
+### Admin dashboard
 
-### Build from source
+Bundled React + Material-UI app served on `:18083`:
 
-```bash
-# Prerequisites: Rust 1.83+, Node.js 20+, Yarn
-git clone https://github.com/mqttRust/coremq-rust.git
-cd coremq-rust
+- **Home** — overview metrics
+- **Sessions** — connected clients, search, force-disconnect
+- **Topics** — subscriber counts, publish to any topic from the UI
+- **Listeners** — start / stop transports
+- **WebSocket Client** — built-in MQTT browser client for testing
+- **Admin** — user management (create, list, role assignment)
+- **Multi-language** — EN / KO / UZ
 
-make build           # builds React → embeds into Rust binary
-make install-config  # copies config to /etc/coremq/
-sudo ./target/release/coremq-server
-```
-
-### Development (hot-reload)
-
-```bash
-make install   # install Node deps
-make dev       # React on :3039, Rust API on :18083 — both hot-reload
-```
-
-### Default ports
-
-| Service | Port |
-|---------|------|
-| Dashboard + REST API | `18083` |
-| MQTT TCP | `1883` |
-| MQTT WebSocket | `8083` |
-| MQTT TLS | `8883` |
-
-### Config & data locations
-
-| Path | Description |
-|------|-------------|
-| `/etc/coremq/config.yaml` | Main config (Linux/macOS) |
-| `/etc/coremq/data/` | ReDB database |
-| `C:\ProgramData\CoreMQ\` | Config root (Windows) |
+The dashboard is statically embedded into the broker binary at build time — no separate webserver to run.
 
 ---
 
-## Example Connection
+## Defaults
 
-### TCP
+| Service                    | Port    |
+| -------------------------- | ------- |
+| MQTT TCP                   | `1883`  |
+| MQTT TLS                   | `8883`  |
+| MQTT WebSocket             | `8083`  |
+| Dashboard + REST API       | `18083` |
+| Frontend dev server        | `3039`  |
+
+| Path                          | Description                  |
+| ----------------------------- | ---------------------------- |
+| `/etc/coremq/config.yaml`     | Main config (Linux/macOS)    |
+| `/etc/coremq/data/`           | ReDB database directory      |
+| `C:\ProgramData\CoreMQ\`      | Config root (Windows)        |
+
+Default credentials: `admin` / `public`. **Rotate before exposing the broker.**
+
+---
+
+## Examples
+
+### MQTT over TCP
+
 ```bash
 mosquitto_sub -h localhost -p 1883 -t test/topic
 ```
 
-### WebSocket
+### MQTT over WebSocket
+
 ```javascript
-mqtt.connect("ws://localhost:8083/mqtt", {
-  protocol: "mqtt"
-});
+mqtt.connect("ws://localhost:8083/mqtt", { protocol: "mqtt" });
 ```
 
-### WebSocket Metrics Stream
+### Real-time metrics stream
+
 ```javascript
 const ws = new WebSocket("ws://localhost:18083/api/v1/ws/metrics");
 ws.onmessage = (e) => console.log(JSON.parse(e.data));
 // {"timestamp":"...","memory_mb":42.1,"cpu_percent":0.8,"client_count":317,"topics":[...]}
 ```
 
-### REST Publish
+### REST publish (full flow)
+
 ```bash
-# Login first
 TOKEN=$(curl -s -X POST http://localhost:18083/api/v1/public/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "public"}' | jq -r '.data.access_token')
+  -d '{"username":"admin","password":"public"}' | jq -r '.data.access_token')
 
-# Publish a message
 curl -X POST http://localhost:18083/api/v1/publish \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"topic": "test/topic", "payload": "hello world", "qos": 0, "retain": false}'
+  -d '{"topic":"test/topic","payload":"hello","qos":0,"retain":false}'
 ```
 
 ---
 
 ## Performance
 
-- Fully async (Tokio)
-- Zero-cost abstractions
-- Lock-minimized architecture (DashMap for concurrent access)
-- Scalable across multi-core systems
-- Designed for IoT-scale workloads
-
----
+The engine is single-threaded by design and does not take long-held locks. Concurrent state (sessions, topic subscriptions) lives in `DashMap` for sharded reads and writes. Transports run on the Tokio multi-thread runtime and feed the engine through bounded mpsc channels — backpressure is real, not theoretical. The full stack is async; there are no blocking syscalls in the hot path.
 
 ## Security
 
-- TLS support
-- Secure WebSocket (WSS)
-- Argon2 password hashing
-- JWT token authentication with refresh
-- Casbin RBAC authorization
-- CORS middleware
+TLS and WSS for transport. Argon2id for password hashing. JWT for session tokens with refresh-token rotation. Casbin enforces RBAC on every REST request. CORS middleware on the API. Default credentials are documented but expected to be rotated on first deploy — there is no production deployment story that ships with `admin/public`.
 
 ---
 
 ## Roadmap
 
-- MQTT v5 support
-- QoS 1 and QoS 2
-- Clustering
-- Persistent storage engine
-- Distributed mode
+- Full QoS 1 / QoS 2 reliable delivery
+- MQTT v5
+- Retained messages with persistence
+- ACL-based topic permissions (Casbin policies on publish / subscribe)
+- Webhooks (publish-side and management-side)
+- Prometheus exporter
+- Clustering & distributed mode
 - Plugin system
-- WebSocket metrics endpoint (`/api/v1/ws/metrics`) — real-time memory, CPU, client count, topics
-- Prometheus metrics exporter
-- Retained message management
-- ACL-based topic permissions
 
 ---
+
+## Contributing
+
+Read [`CONTRIBUTING.md`](./CONTRIBUTING.md) for setup, the verification suite, and the issue/PR quality bar. The [`AGENTS.md`](./AGENTS.md) file documents rules-of-engagement for AI coding agents (Claude Code, Cursor, Codex). The [`CHANGELOG.md`](./CHANGELOG.md) follows Keep a Changelog and uses lockstep versioning across the broker and dashboard.
 
 ## License
 
-MIT License
+MIT.
 
 ---
 
-**CoreMQ — Modern MQTT Broker Built in Rust**
+**Plexus — a single-binary MQTT broker, in Rust.**
