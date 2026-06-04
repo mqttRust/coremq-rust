@@ -1,0 +1,29 @@
+[Unit]
+Description=Plexus MQTT broker (CoreMQ)
+Documentation=https://github.com/mqttRust/coremq_rust
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Run under a transient, unprivileged system user managed by systemd.
+DynamicUser=yes
+# Creates and owns /var/lib/coremq for the database/state.
+StateDirectory=coremq
+Environment=COREMQ_CONFIG=/etc/coremq/config.yaml
+Environment=COREMQ_DATA=/var/lib/coremq
+ExecStart=/usr/bin/coremq
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+
+[Install]
+WantedBy=multi-user.target

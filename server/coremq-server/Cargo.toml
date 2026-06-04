@@ -31,6 +31,15 @@ conf-files = [
     "etc/coremq/model.conf",
     "etc/coremq/policy.csv",
 ]
+# Install debian/coremq.service to /lib/systemd/system and enable+start it on
+# install. The systemd enable/start/stop logic is injected into the #DEBHELPER#
+# token in debian/{postinst,prerm,postrm}.
+maintainer-scripts = "debian"
+[package.metadata.deb.systemd-units]
+unit-name = "coremq"
+unit-scripts = "debian"
+enable = true
+start = true
 
 # ── RPM (.rpm) packaging — `cargo generate-rpm -p server/coremq-server` ───────
 # cargo-generate-rpm resolves source paths relative to the workspace root.
