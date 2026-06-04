@@ -2,6 +2,46 @@
 name = "coremq-server"
 version = "0.1.0"
 edition = "2024"
+description = "Plexus - a high-performance single-binary MQTT broker written in async Rust, with an embedded admin dashboard."
+license = "MIT"
+homepage = "https://github.com/mqttRust/coremq_rust"
+repository = "https://github.com/mqttRust/coremq_rust"
+readme = "../../README.md"
+
+# ── Debian (.deb) packaging — `cargo deb -p coremq-server` ────────────────────
+# Source paths are relative to this crate's directory; `target/release/...` is
+# special-cased by cargo-deb to the workspace target directory.
+[package.metadata.deb]
+maintainer = "mqttRust <noreply@github.com>"
+copyright = "2026, mqttRust"
+section = "net"
+priority = "optional"
+extended-description = """
+Plexus runs the MQTT protocol layer (TCP, TLS, WebSocket), the management layer
+(REST API + embedded admin dashboard) and persistence (ReDB) in a single binary."""
+assets = [
+    ["target/release/coremq-server", "usr/bin/coremq", "755"],
+    ["config/config.yaml", "etc/coremq/config.yaml", "644"],
+    ["config/model.conf", "etc/coremq/model.conf", "644"],
+    ["config/policy.csv", "etc/coremq/policy.csv", "644"],
+    ["../../README.md", "usr/share/doc/coremq/README.md", "644"],
+]
+conf-files = [
+    "etc/coremq/config.yaml",
+    "etc/coremq/model.conf",
+    "etc/coremq/policy.csv",
+]
+
+# ── RPM (.rpm) packaging — `cargo generate-rpm -p server/coremq-server` ───────
+# cargo-generate-rpm resolves source paths relative to the workspace root.
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/coremq-server", dest = "/usr/bin/coremq", mode = "755" },
+    { source = "server/coremq-server/config/config.yaml", dest = "/etc/coremq/config.yaml", mode = "644", config = true },
+    { source = "server/coremq-server/config/model.conf", dest = "/etc/coremq/model.conf", mode = "644", config = true },
+    { source = "server/coremq-server/config/policy.csv", dest = "/etc/coremq/policy.csv", mode = "644", config = true },
+    { source = "README.md", dest = "/usr/share/doc/coremq/README.md", mode = "644", doc = true },
+]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }

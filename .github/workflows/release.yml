@@ -1,0 +1,144 @@
+name: Release
+
+# Builds installation media for Linux, Debian, RPM, macOS and Windows.
+# Triggered by pushing a version tag (e.g. `git tag v0.1.0 && git push origin v0.1.0`).
+# Each runner builds the React dashboard, embeds it into the release binary, then
+# packages the result. Artifacts are attached to a GitHub Release for the tag.
+# `workflow_dispatch` runs the same builds and uploads them as workflow artifacts
+# (no Release) so you can test the pipeline without cutting a release.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write # create the Release and upload assets
+
+env:
+  CARGO_TERM_COLOR: always
+  BIN_NAME: coremq # installed command name (binary crate is coremq-server)
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            linux_packages: true
+          - name: macos-x86_64
+            os: macos-13 # Intel runner
+            target: x86_64-apple-darwin
+          - name: macos-aarch64
+            os: macos-14 # Apple Silicon runner
+            target: aarch64-apple-darwin
+          - name: windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Build the embedded dashboard (produces client/dist) ───────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build dashboard
+        shell: bash
+        run: |
+          corepack enable
+          cd client
+          yarn install --frozen-lockfile
+          yarn build
+
+      # ── Build the release binary (embeds client/dist via rust-embed) ──────
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build server (release)
+        run: cargo build --release -p coremq-server
+
+      # ── Determine version / artifact base name ────────────────────────────
+      - name: Compute names
+        id: names
+        shell: bash
+        run: |
+          ref="${GITHUB_REF_NAME}"
+          version="${ref#v}"           # strip leading v from tag; harmless otherwise
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "base=${BIN_NAME}-${version}-${{ matrix.target }}" >> "$GITHUB_OUTPUT"
+
+      # ── Stage binary + config + docs into a single layout ─────────────────
+      - name: Stage archive
+        id: stage
+        shell: bash
+        run: |
+          base="${{ steps.names.outputs.base }}"
+          stage="dist/${base}"
+          mkdir -p "${stage}/config"
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            cp "target/release/coremq-server.exe" "${stage}/${BIN_NAME}.exe"
+          else
+            cp "target/release/coremq-server" "${stage}/${BIN_NAME}"
+          fi
+          cp server/coremq-server/config/config.yaml "${stage}/config/"
+          cp server/coremq-server/config/model.conf  "${stage}/config/"
+          cp server/coremq-server/config/policy.csv  "${stage}/config/"
+          cp README.md "${stage}/"
+          echo "stage=${stage}" >> "$GITHUB_OUTPUT"
+
+      # ── Archive: .zip on Windows, .tar.gz elsewhere ───────────────────────
+      - name: Archive (tar.gz)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          base="${{ steps.names.outputs.base }}"
+          tar -C dist -czf "dist/${base}.tar.gz" "${base}"
+
+      - name: Archive (zip)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $base = "${{ steps.names.outputs.base }}"
+          Compress-Archive -Path "dist/$base" -DestinationPath "dist/$base.zip"
+
+      # ── Linux only: build .deb and .rpm ───────────────────────────────────
+      - name: Install deb/rpm packagers
+        if: matrix.linux_packages
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb,cargo-generate-rpm
+      - name: Build .deb and .rpm
+        if: matrix.linux_packages
+        run: |
+          cargo deb -p coremq-server --no-build --output dist/
+          # cargo-generate-rpm's -p is a PATH to the crate, not a crate name
+          cargo generate-rpm -p server/coremq-server --output dist/
+
+      # ── Publish ───────────────────────────────────────────────────────────
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.deb
+            dist/*.rpm
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.deb
+            dist/*.rpm
+          fail_on_unmatched_files: false
