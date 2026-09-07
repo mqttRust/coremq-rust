@@ -1,224 +1,239 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Stack from '@mui/material/Stack';
-import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
-import Alert from '@mui/material/Alert';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import TextField from '@mui/material/TextField';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import Card from '@mui/material/Card';
+import ContentLayout from '@cloudscape-design/components/content-layout';
+import Header from '@cloudscape-design/components/header';
+import Table from '@cloudscape-design/components/table';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Badge from '@cloudscape-design/components/badge';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Modal from '@cloudscape-design/components/modal';
+import Form from '@cloudscape-design/components/form';
+import FormField from '@cloudscape-design/components/form-field';
+import Input from '@cloudscape-design/components/input';
+import Select from '@cloudscape-design/components/select';
+import TextFilter from '@cloudscape-design/components/text-filter';
 
-import { Iconify } from 'src/components/iconify';
-import { useUserStore } from 'src/stores/user-store';
+import { useUserStore, selectUsers } from 'src/stores/user-store';
+import { notify } from 'src/stores/notification-store';
+
+type User = { username: string; password_hash: string; role: string };
+
+const ROLE_OPTIONS = [
+    { label: 'Admin', value: 'admin' },
+    { label: 'User', value: 'user' },
+];
 
 export function AdminView() {
-    const { users, loading, error, fetch: fetchUsers, create, clearError } = useUserStore();
+    const { t } = useTranslation();
+    const users = useUserStore(selectUsers);
+    const loading = useUserStore((s) => s.loading);
+    const fetch = useUserStore((s) => s.fetch);
+    const create = useUserStore((s) => s.create);
 
-    const [dialogOpen, setDialogOpen] = useState(false);
+    const [filterText, setFilterText] = useState('');
+
+    const [modalOpen, setModalOpen] = useState(false);
     const [creating, setCreating] = useState(false);
-    const [formError, setFormError] = useState<string | null>(null);
     const [newUsername, setNewUsername] = useState('');
     const [newPassword, setNewPassword] = useState('');
-    const [newRole, setNewRole] = useState('user');
-
-    const { t } = useTranslation();
+    const [newRole, setNewRole] = useState(ROLE_OPTIONS[1]);
+    const [usernameError, setUsernameError] = useState('');
+    const [passwordError, setPasswordError] = useState('');
 
     useEffect(() => {
-        fetchUsers();
-    }, []);
+        fetch();
+    }, [fetch]);
+
+    const items = useMemo(() => {
+        const q = filterText.trim().toLowerCase();
+        if (!q) return users;
+        return users.filter((u) => u.username.toLowerCase().includes(q));
+    }, [users, filterText]);
+
+    const resetForm = () => {
+        setNewUsername('');
+        setNewPassword('');
+        setNewRole(ROLE_OPTIONS[1]);
+        setUsernameError('');
+        setPasswordError('');
+    };
+
+    const openModal = () => {
+        resetForm();
+        setModalOpen(true);
+    };
+
+    const closeModal = () => {
+        setModalOpen(false);
+        resetForm();
+    };
 
     const handleCreate = async () => {
-        if (!newUsername.trim() || !newPassword.trim()) {
-            setFormError(t('admin.validationRequired'));
-            return;
+        const username = newUsername.trim();
+        const password = newPassword.trim();
+
+        let invalid = false;
+        if (!username) {
+            setUsernameError(t('admin.validationRequired'));
+            invalid = true;
+        } else {
+            setUsernameError('');
         }
+        if (!password) {
+            setPasswordError(t('admin.validationRequired'));
+            invalid = true;
+        } else {
+            setPasswordError('');
+        }
+        if (invalid) return;
 
         setCreating(true);
-        setFormError(null);
-        const success = await create({
-            username: newUsername,
-            password_hash: newPassword,
-            role: newRole,
-        });
+
+        // Backend quirk: create() may resolve/throw even when the request
+        // actually succeeded (the success path can surface as a 500-looking
+        // response). So we treat both the boolean result AND the presence of
+        // the user after the store's refetch as success signals.
+        let result = false;
+        try {
+            result = await create({
+                username,
+                password_hash: password, // PLAINTEXT; backend hashes it
+                role: newRole.value!,
+            });
+        } catch {
+            result = false;
+        }
+
         setCreating(false);
 
-        if (success) {
-            setDialogOpen(false);
-            setNewUsername('');
-            setNewPassword('');
-            setNewRole('user');
+        const state = useUserStore.getState();
+        const created = state.users.some((u) => u.username === username);
+
+        if (result || created) {
+            notify('success', `User ${username} created`);
+            closeModal();
         } else {
-            setFormError('Failed to create user');
+            notify('error', state.error ?? 'Failed to create user');
         }
     };
-
-    const roleColor = (role: string) => {
-        switch (role.toLowerCase()) {
-            case 'admin':
-                return 'error';
-            case 'user':
-                return 'primary';
-            default:
-                return 'default';
-        }
-    };
-
-    if (loading && users.length === 0) {
-        return (
-            <Box sx={{ m: 3, display: 'flex', justifyContent: 'center', py: 10 }}>
-                <CircularProgress size={32} sx={{ color: 'primary.main' }} />
-            </Box>
-        );
-    }
 
     return (
-        <Box sx={{ p: { xs: 2, sm: 3 } }}>
-            <Box
-                sx={{
-                    mb: 3,
-                    display: 'flex',
-                    flexDirection: { xs: 'column', sm: 'row' },
-                    alignItems: { xs: 'stretch', sm: 'center' },
-                    gap: { xs: 2, sm: 0 },
-                }}
+        <ContentLayout
+            header={
+                <Header
+                    variant="h1"
+                    description="Broker users and their access roles. Admins can manage the broker; users have limited access."
+                    counter={`(${users.length})`}
+                    actions={
+                        <SpaceBetween direction="horizontal" size="xs">
+                            <Button variant="primary" onClick={openModal}>
+                                {t('admin.addUser')}
+                            </Button>
+                            <Button onClick={() => fetch()} loading={loading}>
+                                Refresh
+                            </Button>
+                        </SpaceBetween>
+                    }
+                >
+                    {t('admin.title')}
+                </Header>
+            }
+        >
+            <Table<User>
+                variant="container"
+                loading={loading}
+                loadingText="Loading users"
+                items={items}
+                trackBy="username"
+                filter={
+                    <TextFilter
+                        filteringText={filterText}
+                        filteringPlaceholder="Find users"
+                        onChange={(e) => setFilterText(e.detail.filteringText)}
+                    />
+                }
+                columnDefinitions={[
+                    {
+                        id: 'index',
+                        header: '#',
+                        cell: (u) => items.indexOf(u) + 1,
+                        width: 60,
+                    },
+                    {
+                        id: 'username',
+                        header: t('admin.username'),
+                        cell: (u) => <Box fontWeight="bold">{u.username}</Box>,
+                        sortingField: 'username',
+                    },
+                    {
+                        id: 'role',
+                        header: t('admin.role'),
+                        cell: (u) => (
+                            <Badge color={u.role === 'admin' ? 'green' : 'grey'}>
+                                {u.role.toUpperCase()}
+                            </Badge>
+                        ),
+                        sortingField: 'role',
+                    },
+                ]}
+                empty={
+                    <Box textAlign="center" color="inherit" padding={{ vertical: 'l' }}>
+                        <SpaceBetween size="xs">
+                            <b>{t('admin.empty')}</b>
+                            <span>No users have been created yet.</span>
+                        </SpaceBetween>
+                    </Box>
+                }
+            />
+
+            <Modal
+                visible={modalOpen}
+                onDismiss={closeModal}
+                header={t('admin.addUser')}
+                footer={
+                    <Box float="right">
+                        <SpaceBetween direction="horizontal" size="xs">
+                            <Button variant="link" onClick={closeModal}>
+                                {t('admin.cancel')}
+                            </Button>
+                            <Button variant="primary" loading={creating} onClick={handleCreate}>
+                                {creating ? t('admin.creating') : t('admin.create')}
+                            </Button>
+                        </SpaceBetween>
+                    </Box>
+                }
             >
-                <Box sx={{ flexGrow: 1 }}>
-                    <Typography
-                        variant="h4"
-                        sx={{ fontWeight: 700, letterSpacing: '-0.01em', fontSize: { xs: '1.4rem', sm: '2.125rem' } }}
-                    >
-                        {t('admin.title')}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                        {users.length} {users.length === 1 ? 'user' : 'users'}
-                    </Typography>
-                </Box>
-                <Stack direction="row" spacing={1}>
-                    <Button
-                        variant="contained"
-                        startIcon={<Iconify icon="mingcute:add-line" width={18} />}
-                        onClick={() => setDialogOpen(true)}
-                        size="small"
-                    >
-                        {t('admin.addUser')}
-                    </Button>
-                    <Button
-                        variant="contained"
-                        color="inherit"
-                        startIcon={<Iconify icon="mdi:refresh" width={18} />}
-                        onClick={fetchUsers}
-                        size="small"
-                    >
-                        {t('sessions.refresh')}
-                    </Button>
-                </Stack>
-            </Box>
-
-            {error && (
-                <Alert severity="error" sx={{ mb: 2 }} onClose={clearError}>
-                    {error}
-                </Alert>
-            )}
-
-            {users.length === 0 ? (
-                <Alert severity="info">{t('admin.empty')}</Alert>
-            ) : (
-                <Card>
-                    <TableContainer>
-                        <Table size="small">
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell sx={{ width: 50 }}>#</TableCell>
-                                    <TableCell>{t('admin.username')}</TableCell>
-                                    <TableCell>{t('admin.role')}</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {users.map((user, index) => (
-                                    <TableRow key={user.username}>
-                                        <TableCell>
-                                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                                {index + 1}
-                                            </Typography>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Typography variant="subtitle2">{user.username}</Typography>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Chip
-                                                label={user.role}
-                                                color={roleColor(user.role) as any}
-                                                size="small"
-                                                sx={{
-                                                    fontWeight: 700,
-                                                    fontSize: '0.7rem',
-                                                    letterSpacing: '0.04em',
-                                                    textTransform: 'uppercase',
-                                                }}
-                                            />
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                </Card>
-            )}
-
-            <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth>
-                <DialogTitle sx={{ fontWeight: 700 }}>{t('admin.addUser')}</DialogTitle>
-                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-                    {formError && <Alert severity="error">{formError}</Alert>}
-                    <TextField
-                        label={t('admin.username')}
-                        value={newUsername}
-                        onChange={(e) => setNewUsername(e.target.value)}
-                        fullWidth
-                        size="small"
-                        sx={{ mt: 1 }}
-                    />
-                    <TextField
-                        label={t('admin.password')}
-                        type="password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        fullWidth
-                        size="small"
-                    />
-                    <FormControl size="small" fullWidth>
-                        <InputLabel>{t('admin.role')}</InputLabel>
-                        <Select value={newRole} label={t('admin.role')} onChange={(e) => setNewRole(e.target.value)}>
-                            <MenuItem value="admin">Admin</MenuItem>
-                            <MenuItem value="user">User</MenuItem>
-                        </Select>
-                    </FormControl>
-                </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 2 }}>
-                    <Button onClick={() => setDialogOpen(false)} color="inherit">
-                        {t('admin.cancel')}
-                    </Button>
-                    <Button onClick={handleCreate} variant="contained" disabled={creating}>
-                        {creating ? t('admin.creating') : t('admin.create')}
-                    </Button>
-                </DialogActions>
-            </Dialog>
-        </Box>
+                <Form>
+                    <SpaceBetween size="l">
+                        <FormField label={t('admin.username')} errorText={usernameError}>
+                            <Input
+                                value={newUsername}
+                                onChange={(e) => setNewUsername(e.detail.value)}
+                                placeholder={t('admin.username')}
+                            />
+                        </FormField>
+                        <FormField label={t('admin.password')} errorText={passwordError}>
+                            <Input
+                                type="password"
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.detail.value)}
+                                placeholder={t('admin.password')}
+                            />
+                        </FormField>
+                        <FormField label={t('admin.role')}>
+                            <Select
+                                selectedOption={newRole}
+                                options={ROLE_OPTIONS}
+                                onChange={(e) => setNewRole(e.detail.selectedOption as typeof ROLE_OPTIONS[number])}
+                            />
+                        </FormField>
+                    </SpaceBetween>
+                </Form>
+            </Modal>
+        </ContentLayout>
     );
 }
+
+export default AdminView;

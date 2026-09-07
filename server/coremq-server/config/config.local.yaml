@@ -1,0 +1,22 @@
+app:
+  name: "coremq"
+  env: "development"
+
+# Local development config — repo-relative paths, no /etc/coremq or sudo required.
+# Used by `make local` / `make run-local`.
+middleware:
+  model_path: server/coremq-server/config/model.conf
+  policy_path: server/coremq-server/config/policy.csv
+  secret: local-dev-secret-change-me
+
+mqtt:
+  listeners:
+    - name: "tcp"
+      protocol: "tcp"
+      host: "0.0.0.0"
+      port: 1883
+
+    - name: "ws"
+      protocol: "ws"
+      host: "0.0.0.0"
+      port: 8083

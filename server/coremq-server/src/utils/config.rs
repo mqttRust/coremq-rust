@@ -43,18 +43,21 @@ g = _, _
 e = some(where (p.eft == allow))
 
 [matchers]
-m = g(r.sub, p.sub) || (r.sub == p.sub && r.obj == p.obj && r.act == p.act) || p.sub == "public"
+m = g(r.sub, p.sub) || (r.sub == p.sub && keyMatch(r.obj, p.obj) && r.act == p.act) || p.sub == "public"
 "#;
 
-const DEFAULT_POLICY_CSV: &str = r#"# Policies for users
+const DEFAULT_POLICY_CSV: &str = r#"# Admin role — full access to the control-plane API (keyMatch wildcard)
+p, admin, /api/v1/*, GET
+p, admin, /api/v1/*, POST
+p, admin, /api/v1/*, PUT
+p, admin, /api/v1/*, DELETE
+
+# Operator role — read-only monitoring
 p, user, /api/v1/listeners, GET
 p, user, /api/v1/sessions, GET
 
 # Public access
 p, public, /api/v1/public/login, POST
-
-# Role assignments
-g, alice, admin
 "#;
 
 pub fn from_file() -> Result<Config, Box<dyn std::error::Error>> {

@@ -14,6 +14,7 @@ use tokio::{
 };
 
 use crate::{
+    cluster::Origin,
     engine::{ConnectCommand, PubSubCommand},
     enums::MqttChannel,
     protocol::{
@@ -52,6 +53,7 @@ async fn handle_socket(socket: WebSocket, state: WsState,   remote_addr: SocketA
     let mut timeout_duration = Duration::from_secs(60);
     let mut last_activity = Instant::now();
     let mut disconnect_requested = false;
+    let mut auth_failed = false;
 
     let mut ticker = time::interval(Duration::from_secs(5));
     ticker.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
@@ -81,10 +83,27 @@ async fn handle_socket(socket: WebSocket, state: WsState,   remote_addr: SocketA
                                         Decoder::Connect(p) => {
                                             client_id = Some(p.client_id.clone());
                                             timeout_duration = Duration::from_secs((p.keep_alive as u64) * 3 / 2);
+
+                                            let allowed = state.engine.auth.authenticate(
+                                                &p.client_id,
+                                                p.username.as_deref(),
+                                                p.password.as_deref(),
+                                                remote_addr,
+                                            ).await;
+
+                                            if !allowed {
+                                                let _ = Encoder::ConnAck { session_present: false, return_code: 0x05 }
+                                                    .send_ws(&mut sender).await;
+                                                println!("Auth rejected client {} from {}", p.client_id, remote_addr);
+                                                client_id = None;
+                                                auth_failed = true;
+                                                break;
+                                            }
+
                                             if let Err(e) =  state.engine.connect_tx.send(ConnectCommand::Connect(p.clone(), state.port, remote_addr,  tx.clone() )) {
                                                 println!("Error connecting:  {}", e);
                                             }
-                                            Encoder::ConnAck {session_present: false, }
+                                            Encoder::ConnAck {session_present: false, return_code: 0x00 }
 
                                         }
 
@@ -100,7 +119,7 @@ async fn handle_socket(socket: WebSocket, state: WsState,   remote_addr: SocketA
 
                                         Decoder::Publish(p) => {
                                             last_activity = Instant::now();
-                                           if  let  Err(e) = state.engine.pubsub_tx.send(PubSubCommand::Publish(p.clone())) {
+                                           if  let  Err(e) = state.engine.pubsub_tx.send(PubSubCommand::Publish(p.clone(), Origin::Local)) {
                                               println!("Error publishing: {}", e);
                                            }
                                             match p.packet_id {
@@ -131,6 +150,10 @@ async fn handle_socket(socket: WebSocket, state: WsState,   remote_addr: SocketA
 
                                     let _ = action.send_ws(&mut sender).await;
 
+                                }
+
+                                if auth_failed {
+                                    break;
                                 }
                             }
 

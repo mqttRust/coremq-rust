@@ -1,105 +1,286 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
-import CircularProgress from '@mui/material/CircularProgress';
-import Alert from '@mui/material/Alert';
+import ContentLayout from '@cloudscape-design/components/content-layout';
+import Header from '@cloudscape-design/components/header';
+import Table from '@cloudscape-design/components/table';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Badge from '@cloudscape-design/components/badge';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Modal from '@cloudscape-design/components/modal';
+import Form from '@cloudscape-design/components/form';
+import FormField from '@cloudscape-design/components/form-field';
+import Input from '@cloudscape-design/components/input';
+import Textarea from '@cloudscape-design/components/textarea';
+import Select from '@cloudscape-design/components/select';
+import Toggle from '@cloudscape-design/components/toggle';
+import TextFilter from '@cloudscape-design/components/text-filter';
 
-import { Iconify } from 'src/components/iconify';
-import { useTopicStore } from 'src/stores/topic-store';
+import { useShallow } from 'zustand/react/shallow';
 
-import TopicTable from './topic_table';
-import PublishDrawer from './publish_drawer';
+import type { TopicInfo } from 'src/types/topics';
+import { useTopicStore, selectTopics, selectTopicStats, selectPublishHistory } from 'src/stores/topic-store';
+import { publishMessage } from 'src/services/topics';
+import { notify } from 'src/stores/notification-store';
 
-export default function TopicView() {
-    const { topics, loading, error, fetch: fetchTopics, clearError } = useTopicStore();
-    const [drawerOpen, setDrawerOpen] = useState(false);
-    const [drawerTopic, setDrawerTopic] = useState('');
+type QosOption = { label: string; value: string };
+
+const QOS_OPTIONS: QosOption[] = [
+    { label: 'QoS 0', value: '0' },
+    { label: 'QoS 1', value: '1' },
+    { label: 'QoS 2', value: '2' },
+];
+
+export function TopicView() {
     const { t } = useTranslation();
+    const topics = useTopicStore(selectTopics);
+    const stats = useTopicStore(useShallow(selectTopicStats));
+    const loading = useTopicStore((s) => s.loading);
+    const error = useTopicStore((s) => s.error);
+    const fetch = useTopicStore((s) => s.fetch);
+    const publishHistory = useTopicStore(selectPublishHistory);
+    const addPublish = useTopicStore((s) => s.addPublish);
+    const clearPublishHistory = useTopicStore((s) => s.clearPublishHistory);
+
+    const [filterText, setFilterText] = useState('');
+
+    // Publish modal state
+    const [modalOpen, setModalOpen] = useState(false);
+    const [topicValue, setTopicValue] = useState('');
+    const [payload, setPayload] = useState('');
+    const [qos, setQos] = useState<QosOption>(QOS_OPTIONS[0]);
+    const [retain, setRetain] = useState(false);
+    const [publishing, setPublishing] = useState(false);
+    const [topicError, setTopicError] = useState<string | null>(null);
 
     useEffect(() => {
-        fetchTopics();
-    }, []);
+        fetch();
+    }, [fetch]);
+
+    useEffect(() => {
+        if (error) notify('error', error, t('topics.title'));
+    }, [error, t]);
+
+    const items = useMemo(() => {
+        const q = filterText.trim().toLowerCase();
+        if (!q) return topics;
+        return topics.filter((tp) => tp.topic.toLowerCase().includes(q));
+    }, [topics, filterText]);
 
     const openPublish = (topic = '') => {
-        setDrawerTopic(topic);
-        setDrawerOpen(true);
+        setTopicValue(topic);
+        setPayload('');
+        setQos(QOS_OPTIONS[0]);
+        setRetain(false);
+        setTopicError(null);
+        setModalOpen(true);
     };
 
-    if (loading && topics.length === 0) {
-        return (
-            <Box sx={{ m: 3, display: 'flex', justifyContent: 'center', py: 10 }}>
-                <CircularProgress size={32} sx={{ color: 'primary.main' }} />
-            </Box>
-        );
-    }
+    const closePublish = () => {
+        setModalOpen(false);
+    };
+
+    const handlePublish = async () => {
+        const trimmed = topicValue.trim();
+        if (!trimmed) {
+            setTopicError(t('admin.validationRequired'));
+            return;
+        }
+        setTopicError(null);
+        setPublishing(true);
+        const qosNum = Number(qos.value);
+        try {
+            await publishMessage({ topic: trimmed, payload, qos: qosNum, retain });
+            addPublish({ topic: trimmed, payload, qos: qosNum, retain, ok: true });
+            notify('success', `Message published to ${trimmed}`);
+            // Keep the modal open so more messages can be sent; clear only the payload.
+            setPayload('');
+            fetch();
+        } catch (err: any) {
+            addPublish({ topic: trimmed, payload, qos: qosNum, retain, ok: false });
+            notify('error', err?.message || 'Failed to publish message');
+        } finally {
+            setPublishing(false);
+        }
+    };
 
     return (
-        <Box sx={{ p: { xs: 2, sm: 3 } }}>
-            <Box
-                sx={{
-                    mb: 3,
-                    display: 'flex',
-                    flexDirection: { xs: 'column', sm: 'row' },
-                    alignItems: { xs: 'stretch', sm: 'center' },
-                    gap: { xs: 2, sm: 0 },
-                }}
+        <ContentLayout
+            header={
+                <Header
+                    variant="h1"
+                    description="MQTT topics with active subscriptions on this broker. Publish a message to any topic."
+                    counter={`(${stats.count})`}
+                    actions={
+                        <SpaceBetween direction="horizontal" size="xs">
+                            <Button variant="primary" onClick={() => openPublish()}>
+                                {t('topics.publishMessage')}
+                            </Button>
+                            <Button onClick={() => fetch()} loading={loading}>
+                                {t('topics.refresh')}
+                            </Button>
+                        </SpaceBetween>
+                    }
+                >
+                    {t('topics.title')}
+                </Header>
+            }
+        >
+            <Table<TopicInfo>
+                variant="container"
+                loading={loading}
+                loadingText="Loading topics"
+                items={items}
+                trackBy="topic"
+                filter={
+                    <TextFilter
+                        filteringText={filterText}
+                        filteringPlaceholder="Find topics"
+                        onChange={(e) => setFilterText(e.detail.filteringText)}
+                    />
+                }
+                columnDefinitions={[
+                    {
+                        id: 'topic',
+                        header: t('topics.topic'),
+                        cell: (tp) => <Box variant="samp">{tp.topic}</Box>,
+                        sortingField: 'topic',
+                    },
+                    {
+                        id: 'subscribers',
+                        header: t('topics.subscribers'),
+                        cell: (tp) => (
+                            <Badge color={tp.subscriber_count > 0 ? 'blue' : 'grey'}>
+                                {tp.subscriber_count}
+                            </Badge>
+                        ),
+                        sortingField: 'subscriber_count',
+                    },
+                    {
+                        id: 'actions',
+                        header: t('topics.actions'),
+                        cell: (tp) => (
+                            <Button
+                                variant="inline-link"
+                                onClick={() => openPublish(tp.topic)}
+                            >
+                                {t('topics.publish')}
+                            </Button>
+                        ),
+                    },
+                ]}
+                empty={
+                    <Box textAlign="center" color="inherit" padding={{ vertical: 'l' }}>
+                        <SpaceBetween size="xs">
+                            <b>{t('topics.empty')}</b>
+                            <span>No MQTT topics currently have subscribers.</span>
+                        </SpaceBetween>
+                    </Box>
+                }
+            />
+
+            <Modal
+                visible={modalOpen}
+                onDismiss={closePublish}
+                header={t('topics.publishMessage')}
+                footer={
+                    <Box float="right">
+                        <SpaceBetween direction="horizontal" size="xs">
+                            <Button variant="link" onClick={closePublish}>
+                                Close
+                            </Button>
+                            <Button variant="primary" loading={publishing} onClick={handlePublish}>
+                                {publishing ? t('topics.publishing') : t('topics.publish')}
+                            </Button>
+                        </SpaceBetween>
+                    </Box>
+                }
             >
-                <Box sx={{ flexGrow: 1 }}>
-                    <Typography
-                        variant="h4"
-                        sx={{
-                            fontWeight: 700,
-                            letterSpacing: '-0.01em',
-                            fontSize: { xs: '1.4rem', sm: '2.125rem' },
-                        }}
-                    >
-                        {t('topics.title')}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                        {topics.length} active {topics.length === 1 ? 'topic' : 'topics'}
-                    </Typography>
-                </Box>
-                <Stack direction="row" spacing={1} alignItems="center">
-                    <Button
-                        variant="contained"
-                        color="primary"
-                        startIcon={<Iconify icon="mdi:publish" width={18} />}
-                        onClick={() => openPublish()}
-                        size="small"
-                        sx={{ height: 36 }}
-                    >
-                        {t('topics.publishMessage')}
-                    </Button>
-                    <Button
-                        variant="contained"
-                        color="inherit"
-                        startIcon={<Iconify icon="mdi:refresh" width={18} />}
-                        onClick={() => fetchTopics()}
-                        size="small"
-                        sx={{ height: 36 }}
-                    >
-                        {t('topics.refresh')}
-                    </Button>
-                </Stack>
-            </Box>
+                <SpaceBetween size="l">
+                    <Form>
+                        <SpaceBetween size="l">
+                            <FormField label={t('topics.topic')} errorText={topicError ?? undefined}>
+                                <Input
+                                    value={topicValue}
+                                    onChange={(e) => setTopicValue(e.detail.value)}
+                                    placeholder="e.g. devices/sensor/temperature"
+                                />
+                            </FormField>
 
-            {error && (
-                <Alert severity="error" sx={{ mb: 2 }} onClose={clearError}>
-                    {error}
-                </Alert>
-            )}
+                            <FormField label={t('topics.payload')}>
+                                <Textarea
+                                    value={payload}
+                                    onChange={(e) => setPayload(e.detail.value)}
+                                    rows={5}
+                                    placeholder='e.g. {"temperature": 23.5}'
+                                />
+                            </FormField>
 
-            {!loading && topics.length === 0 ? (
-                <Alert severity="info">{t('topics.empty')}</Alert>
-            ) : (
-                <TopicTable topics={topics} onPublish={openPublish} t={t} />
-            )}
+                            <SpaceBetween direction="horizontal" size="l">
+                                <FormField label="QoS">
+                                    <Select
+                                        selectedOption={qos}
+                                        onChange={(e) => setQos(e.detail.selectedOption as QosOption)}
+                                        options={QOS_OPTIONS}
+                                    />
+                                </FormField>
+                                <FormField label={t('topics.retain')}>
+                                    <Toggle checked={retain} onChange={(e) => setRetain(e.detail.checked)}>
+                                        {t('topics.retain')}
+                                    </Toggle>
+                                </FormField>
+                            </SpaceBetween>
+                        </SpaceBetween>
+                    </Form>
 
-            <PublishDrawer open={drawerOpen} topic={drawerTopic} onClose={() => setDrawerOpen(false)} t={t} />
-        </Box>
+                    <div>
+                        <Box variant="h4">
+                            Sent history{' '}
+                            <Box variant="span" color="text-body-secondary">
+                                ({publishHistory.length})
+                            </Box>
+                        </Box>
+                        {publishHistory.length === 0 ? (
+                            <Box color="text-body-secondary" padding={{ top: 'xs' }}>
+                                No messages sent yet. Published messages will appear here.
+                            </Box>
+                        ) : (
+                            <SpaceBetween size="xs">
+                                <Box textAlign="right">
+                                    <Button variant="inline-link" onClick={clearPublishHistory}>
+                                        Clear history
+                                    </Button>
+                                </Box>
+                                <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                                    <SpaceBetween size="xs">
+                                        {publishHistory.map((rec) => (
+                                            <Box key={rec.id} variant="code">
+                                                <Box variant="span" color="text-body-secondary">
+                                                    {rec.time}
+                                                </Box>{' '}
+                                                <Badge color={rec.ok ? 'green' : 'red'}>
+                                                    {rec.ok ? 'sent' : 'failed'}
+                                                </Badge>{' '}
+                                                <Box variant="span" color="text-status-info">
+                                                    {rec.topic}
+                                                </Box>{' '}
+                                                <Box variant="span" color="text-body-secondary">
+                                                    q{rec.qos}
+                                                    {rec.retain ? ' retain' : ''}
+                                                </Box>{' '}
+                                                <Box variant="span">{rec.payload}</Box>
+                                            </Box>
+                                        ))}
+                                    </SpaceBetween>
+                                </div>
+                            </SpaceBetween>
+                        )}
+                    </div>
+                </SpaceBetween>
+            </Modal>
+        </ContentLayout>
     );
 }
+
+export default TopicView;

@@ -1,21 +1,26 @@
 use bytes::BytesMut;
-use std::{sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     sync::mpsc,
     time::{self, Instant},
 };
 
 use crate::{
+    cluster::Origin,
     engine::{ConnectCommand, PubSubCommand}, enums::MqttChannel, protocol::{decoder::Decoder, encoder::{Encoder, encode_publish}, packets::PublishPacket}, transport::ProtocolState
 };
 
-pub async fn tcp_connection(
-    mut socket: TcpStream,
+/// Drive the MQTT protocol over any byte stream (plain TCP or a TLS-wrapped stream).
+pub async fn tcp_connection<S>(
+    mut socket: S,
     state: Arc<ProtocolState>,
     connected_port: u16,
-) -> anyhow::Result<()> {
+    remote_addr: SocketAddr,
+) -> anyhow::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let (tx, mut rx) = mpsc::channel::<MqttChannel>(2048);
     let mut buffer = BytesMut::with_capacity(4096);
 
@@ -23,10 +28,10 @@ pub async fn tcp_connection(
     let mut timeout_duration = Duration::from_secs(60);
     let mut last_activity = Instant::now();
     let mut disconnect_requested = false;
+    let mut auth_failed = false;
 
     let mut ticker = time::interval(Duration::from_secs(5));
     ticker.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
-    let remote_addr = socket.peer_addr()?;
 
     loop {
         tokio::select! {
@@ -56,10 +61,27 @@ pub async fn tcp_connection(
                                         Decoder::Connect(p) => {
                                             client_id = Some(p.client_id.clone());
                                             timeout_duration = Duration::from_secs((p.keep_alive as u64) * 3 / 2);
+
+                                            let allowed = state.auth.authenticate(
+                                                &p.client_id,
+                                                p.username.as_deref(),
+                                                p.password.as_deref(),
+                                                remote_addr,
+                                            ).await;
+
+                                            if !allowed {
+                                                let _ = Encoder::ConnAck { session_present: false, return_code: 0x05 }
+                                                    .send_tcp(&mut socket).await;
+                                                println!("Auth rejected client {} from {}", p.client_id, remote_addr);
+                                                client_id = None;
+                                                auth_failed = true;
+                                                break;
+                                            }
+
                                             if let Err(e) =  state.connect_tx.send(ConnectCommand::Connect(p.clone(), connected_port, remote_addr, tx.clone() )) {
                                                 println!("Error connecting:  {}", e);
                                             }
-                                            Encoder::ConnAck {session_present: false, }
+                                            Encoder::ConnAck {session_present: false, return_code: 0x00 }
 
                                         }
 
@@ -75,7 +97,7 @@ pub async fn tcp_connection(
 
                                         Decoder::Publish(p) => {
                                             last_activity = Instant::now();
-                                           if  let  Err(e) = state.pubsub_tx.send(PubSubCommand::Publish(p.clone())) {
+                                           if  let  Err(e) = state.pubsub_tx.send(PubSubCommand::Publish(p.clone(), Origin::Local)) {
                                               println!("Error publishing: {}", e);
                                            }
                                             match p.packet_id {
@@ -105,6 +127,10 @@ pub async fn tcp_connection(
 
                                     let _ = action.send_tcp(&mut socket).await;
 
+                                }
+
+                                if auth_failed {
+                                    break;
                                 }
                             }
 
@@ -162,7 +188,7 @@ async fn request_disconnect(tx: &mpsc::Sender<MqttChannel>, flag: &mut bool) {
     }
 }
     
-async fn publish(socket: &mut TcpStream, msg: PublishPacket) -> anyhow::Result<()> {
+async fn publish<S: AsyncWrite + Unpin>(socket: &mut S, msg: PublishPacket) -> anyhow::Result<()> {
     let bytes = encode_publish(&msg);
     socket.write_all(&bytes).await?;
     Ok(())

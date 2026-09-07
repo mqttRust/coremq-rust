@@ -3,12 +3,12 @@ use crate::protocol::packets::PublishPacket;
 
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, stream::SplitSink};
-use tokio::{io::AsyncWriteExt, net::TcpStream};
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 
 
 
 pub enum Encoder {
-    ConnAck { session_present: bool },
+    ConnAck { session_present: bool, return_code: u8 },
     SubAck { packet_id: u16 },
     UnsubAck { packet_id: u16 },
     PubAck {  packet_id: u16},
@@ -21,11 +21,11 @@ pub enum Encoder {
 impl Encoder {
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
-            Encoder::ConnAck { session_present } => vec![
+            Encoder::ConnAck { session_present, return_code } => vec![
                 0x20,
                 0x02,
                 if *session_present { 0x01 } else { 0x00 },
-                0x00,
+                *return_code,
             ],
 
             Encoder::SubAck { packet_id } => vec![
@@ -57,7 +57,7 @@ impl Encoder {
     }
 
 
-    pub async fn send_tcp(self, socket: &mut TcpStream) -> anyhow::Result<()> {
+    pub async fn send_tcp<S: AsyncWrite + Unpin>(self, socket: &mut S) -> anyhow::Result<()> {
         let bytes = self.to_bytes();
         socket.write_all(&bytes).await?;
         Ok(())

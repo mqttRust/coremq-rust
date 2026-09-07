@@ -14,6 +14,10 @@ pub struct ListenerConfig {
 
     #[serde(default)]
     pub tls: Option<TlsConfig>,
+
+    /// Maximum simultaneous client connections on this listener (None = unlimited).
+    #[serde(default)]
+    pub max_connections: Option<u32>,
 }
 
 

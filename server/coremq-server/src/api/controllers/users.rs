@@ -1,5 +1,13 @@
 use axum::{Json, extract::State, http::StatusCode};
-use crate::{api::api_state::{ApiResponse, ApiState}, enums::role::RoleType, models::{login::{Login, Token}, user::User}, utils::{self, password::hash_password}};
+use crate::{api::api_state::{ApiResponse, ApiState}, enums::{jwt::JwtType, role::RoleType}, models::{login::{Login, RefreshRequest, Token}, user::User}, utils::{self, password::hash_password}};
+
+/// Map a stored role string back to a `RoleType` (defaults to `User`).
+fn role_from_str(role: &str) -> RoleType {
+    match role {
+        "admin" => RoleType::Admin,
+        _ => RoleType::User,
+    }
+}
 
 
 pub async fn create_user(
@@ -18,10 +26,8 @@ pub async fn create_user(
 
     match state.storage.user.create(&user) {
         Ok(()) => (
-          
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::success(user, "successfully created"))
-            
+            StatusCode::CREATED,
+            Json(ApiResponse::success(user, "successfully created")),
         ),
 
         Err(e) => (
@@ -60,9 +66,41 @@ pub async fn login(
 
     (StatusCode::OK, Json(ApiResponse::success(token, "successfully created")))
 
-    
+
 }
-// logout user 
+
+// refresh access token
+pub async fn refresh_token(
+    State(state): State<ApiState>,
+    Json(data): Json<RefreshRequest>,
+) -> (StatusCode, Json<ApiResponse<Token>>) {
+    let claims = match state.jwt_service.parse(&data.refresh_token) {
+        Ok(claims) => claims,
+        Err(_) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(ApiResponse::error(StatusCode::UNAUTHORIZED, "invalid refresh token")),
+            );
+        }
+    };
+
+    if claims.token_type != JwtType::RefreshToken.as_str() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ApiResponse::error(StatusCode::UNAUTHORIZED, "not a refresh token")),
+        );
+    }
+
+    match state.jwt_service.generate(claims.sub, role_from_str(&claims.role)) {
+        Ok(token) => (StatusCode::OK, Json(ApiResponse::success(token, "token refreshed"))),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+        ),
+    }
+}
+
+// logout user
 
 // delete user
 

@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: dev server client install build build-client build-server setup fmt lint fix docker-build docker-run docker-stop docker-logs docker-rm
+.PHONY: dev server client install build build-client build-client-npm build-server local run-local setup fmt lint fix docker docker-build docker-run docker-stop docker-logs docker-rm
 
 # ── Development ──────────────────────────────────────────────────────────────
 
@@ -28,10 +28,36 @@ build: build-client build-server
 build-client:
 	cd client && yarn install && yarn build
 
+# npm variant (use when yarn is not installed)
+build-client-npm:
+	cd client && npm ci && npm run build
+
 build-server:
 	cargo build --release -p coremq-server
 
+# ── Local (Linux) build & run — no sudo, no /etc/coremq ───────────────────────
+
+# One shot: build the React client (npm), embed it into the release binary,
+# then run the broker locally with a repo-relative config and ./data store.
+# Admin panel: http://localhost:18083  (default login: admin / public)
+# MQTT TCP: 1883   MQTT WS: 8083
+local: build-client-npm build-server run-local
+
+# Run the already-built release binary with the local config (no rebuild).
+run-local:
+	@mkdir -p data
+	COREMQ_CONFIG=server/coremq-server/config/config.local.yaml \
+	COREMQ_DATA=data \
+	./target/release/coremq-server
+
 # ── Docker ───────────────────────────────────────────────────────────────────
+
+# One shot: build the image, stop & remove any existing container, run fresh.
+# Usage: make docker
+docker: docker-build
+	-docker rm -f coremq
+	$(MAKE) docker-run
+	@echo "CoreMQ is running → admin panel http://localhost:18083 (login: admin / public)"
 
 docker-build:
 	docker build -t coremq:latest .

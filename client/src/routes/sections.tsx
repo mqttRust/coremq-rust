@@ -1,14 +1,12 @@
 import type { RouteObject } from 'react-router';
 
 import { lazy, Suspense } from 'react';
-import { Outlet } from 'react-router-dom';
-import { varAlpha } from 'minimal-shared/utils';
 
-import Box from '@mui/material/Box';
-import LinearProgress, { linearProgressClasses } from '@mui/material/LinearProgress';
+import Spinner from '@cloudscape-design/components/spinner';
+import Box from '@cloudscape-design/components/box';
 
-import { AuthLayout } from 'src/layouts/auth';
-import { DashboardLayout } from 'src/layouts/dashboard';
+import AppShell from 'src/layouts/app-shell';
+import AuthShell from 'src/layouts/auth-shell';
 import ProtectedRoute from './protected_route';
 
 export const DashboardPage = lazy(() => import('src/pages/home'));
@@ -19,75 +17,53 @@ export const ListenerPage = lazy(() => import('src/pages/listener'));
 export const WebhookPage = lazy(() => import('src/pages/webhook'));
 export const WebsocketPage = lazy(() => import('src/pages/websocket'));
 export const TopicsPage = lazy(() => import('src/pages/topics'));
+export const CertificatesPage = lazy(() => import('src/pages/certificates'));
+export const AuthenticationPage = lazy(() => import('src/pages/authentication'));
+export const ClusterPage = lazy(() => import('src/pages/cluster'));
 export const Page404 = lazy(() => import('src/pages/page-not-found'));
 
 const renderFallback = () => (
-    <Box
-        sx={{
-            display: 'flex',
-            flex: '1 1 auto',
-            alignItems: 'center',
-            justifyContent: 'center',
-        }}
-    >
-        <LinearProgress
-            sx={{
-                width: 1,
-                maxWidth: 320,
-                bgcolor: (theme) => varAlpha(theme.vars.palette.text.primaryChannel, 0.16),
-                [`& .${linearProgressClasses.bar}`]: { bgcolor: 'text.primary' },
-            }}
-        />
+    <Box textAlign="center" padding={{ top: 'xxxl' }}>
+        <Spinner size="large" />
     </Box>
 );
+
+const suspense = (node: React.ReactNode) => <Suspense fallback={renderFallback()}>{node}</Suspense>;
 
 export const routesSection: RouteObject[] = [
     {
         element: <ProtectedRoute />,
         children: [
             {
-                element: (
-                    <DashboardLayout>
-                        <Suspense fallback={renderFallback()}>
-                            <Outlet />
-                        </Suspense>
-                    </DashboardLayout>
-                ),
+                element: <AppShell />,
                 children: [
-                    { index: true, element: <DashboardPage /> },
-                    { path: 'sessions', element: <SessionPage /> },
-                    { path: 'listeners', element: <ListenerPage /> },
-                    { path: 'admins', element: <AdminPage /> },
-                    { path: 'webhooks', element: <WebhookPage /> },
-                    { path: 'websockets', element: <WebsocketPage /> },
-                    { path: 'topics', element: <TopicsPage /> },
+                    { index: true, element: suspense(<DashboardPage />) },
+                    { path: 'sessions', element: suspense(<SessionPage />) },
+                    { path: 'listeners', element: suspense(<ListenerPage />) },
+                    { path: 'admins', element: suspense(<AdminPage />) },
+                    { path: 'webhooks', element: suspense(<WebhookPage />) },
+                    { path: 'websockets', element: suspense(<WebsocketPage />) },
+                    { path: 'topics', element: suspense(<TopicsPage />) },
+                    { path: 'certificates', element: suspense(<CertificatesPage />) },
+                    { path: 'authentication', element: suspense(<AuthenticationPage />) },
+                    { path: 'cluster', element: suspense(<ClusterPage />) },
                 ],
             },
         ],
     },
 
     {
-        path: 'sign-in',
-        element: (
-            <AuthLayout>
-                <Suspense fallback={renderFallback()}>
-                    <SignInPage />
-                </Suspense>
-            </AuthLayout>
-        ),
+        element: <AuthShell />,
+        children: [{ path: 'sign-in', element: suspense(<SignInPage />) }],
     },
 
     {
         path: '404',
-        element: (
-            <Suspense fallback={renderFallback()}>
-                <Page404 />
-            </Suspense>
-        ),
+        element: suspense(<Page404 />),
     },
 
     {
         path: '*',
-        element: <Page404 />,
+        element: suspense(<Page404 />),
     },
 ];

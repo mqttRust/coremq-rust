@@ -1,9 +1,12 @@
-# Policies for users
+# Admin role — full access to the control-plane API (keyMatch wildcard)
+p, admin, /api/v1/*, GET
+p, admin, /api/v1/*, POST
+p, admin, /api/v1/*, PUT
+p, admin, /api/v1/*, DELETE
+
+# Operator role — read-only monitoring
 p, user, /api/v1/listeners, GET
 p, user, /api/v1/sessions, GET
 
 # Public access
 p, public, /api/v1/public/login, POST
-
-# Role assignments
-g, alice, admin

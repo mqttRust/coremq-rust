@@ -1,59 +1,49 @@
-import type { Theme, CSSObject } from '@mui/material/styles';
-
 import { useRouteError, isRouteErrorResponse } from 'react-router';
 
-import GlobalStyles from '@mui/material/GlobalStyles';
-
+/** Framework-light route error screen (no UI-kit dependency). */
 export function ErrorBoundary() {
     const error = useRouteError();
 
     return (
-        <>
-            {inputGlobalStyles()}
-
-            <div className={errorBoundaryClasses.root}>
-                <div className={errorBoundaryClasses.container}>{renderErrorMessage(error)}</div>
-            </div>
-        </>
+        <div style={rootStyle}>
+            <div style={containerStyle}>{renderErrorMessage(error)}</div>
+        </div>
     );
 }
 
 function parseStackTrace(stack?: string) {
-    if (!stack) return { filePath: null, functionName: null };
-
+    if (!stack) return { filePath: null as string | null, functionName: null as string | null };
     const filePathMatch = stack.match(/\/src\/[^?]+/);
     const functionNameMatch = stack.match(/at (\S+)/);
-
     return {
         filePath: filePathMatch ? filePathMatch[0] : null,
         functionName: functionNameMatch ? functionNameMatch[1] : null,
     };
 }
 
-function renderErrorMessage(error: any) {
+function renderErrorMessage(error: unknown) {
     if (isRouteErrorResponse(error)) {
         return (
             <>
-                <h1 className={errorBoundaryClasses.title}>
+                <h1 style={titleStyle}>
                     {error.status}: {error.statusText}
                 </h1>
-                <p className={errorBoundaryClasses.message}>{error.data}</p>
+                <p style={messageStyle}>{String(error.data)}</p>
             </>
         );
     }
 
     if (error instanceof Error) {
         const { filePath, functionName } = parseStackTrace(error.stack);
-
         return (
             <>
-                <h1 className={errorBoundaryClasses.title}>Unexpected Application Error!</h1>
-                <p className={errorBoundaryClasses.message}>
+                <h1 style={titleStyle}>Unexpected Application Error!</h1>
+                <p style={messageStyle}>
                     {error.name}: {error.message}
                 </p>
-                <pre className={errorBoundaryClasses.details}>{error.stack}</pre>
+                <pre style={detailsStyle}>{error.stack}</pre>
                 {(filePath || functionName) && (
-                    <p className={errorBoundaryClasses.filePath}>
+                    <p style={filePathStyle}>
                         {filePath} ({functionName})
                     </p>
                 )}
@@ -61,41 +51,24 @@ function renderErrorMessage(error: any) {
         );
     }
 
-    return <h1 className={errorBoundaryClasses.title}>Unknown Error</h1>;
+    return <h1 style={titleStyle}>Unknown Error</h1>;
 }
 
-const errorBoundaryClasses = {
-    root: 'error-boundary-root',
-    container: 'error-boundary-container',
-    title: 'error-boundary-title',
-    details: 'error-boundary-details',
-    message: 'error-boundary-message',
-    filePath: 'error-boundary-file-path',
-};
+const MONO = '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace';
 
-const cssVars: CSSObject = {
-    '--info-color': '#2dd9da',
-    '--warning-color': '#e2aa53',
-    '--error-color': '#ff5555',
-    '--error-background': '#2a1e1e',
-    '--details-background': '#111111',
-    '--root-background': '#2c2c2e',
-    '--container-background': '#1c1c1e',
-    '--font-stack-monospace': '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace',
-    '--font-stack-sans':
-        '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"',
-};
-
-const rootStyles = (): CSSObject => ({
+const rootStyle: React.CSSProperties = {
     display: 'flex',
     flex: '1 1 auto',
     alignItems: 'center',
     padding: '10vh 15px 0',
     flexDirection: 'column',
-    fontFamily: 'var(--font-stack-sans)',
-});
+    minHeight: '100vh',
+    color: 'white',
+    backgroundColor: '#2c2c2e',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif',
+};
 
-const contentStyles = (): CSSObject => ({
+const containerStyle: React.CSSProperties = {
     gap: 24,
     padding: 20,
     width: '100%',
@@ -103,59 +76,33 @@ const contentStyles = (): CSSObject => ({
     display: 'flex',
     borderRadius: 8,
     flexDirection: 'column',
-    backgroundColor: 'var(--container-background)',
-});
+    backgroundColor: '#1c1c1e',
+};
 
-const titleStyles = (theme: Theme): CSSObject => ({
-    margin: 0,
-    lineHeight: 1.2,
-    fontSize: theme.typography.pxToRem(20),
-    fontWeight: theme.typography.fontWeightBold,
-});
+const titleStyle: React.CSSProperties = { margin: 0, lineHeight: 1.2, fontSize: 20, fontWeight: 700 };
 
-const messageStyles = (theme: Theme): CSSObject => ({
+const messageStyle: React.CSSProperties = {
     margin: 0,
     lineHeight: 1.5,
     padding: '12px 16px',
     whiteSpace: 'pre-wrap',
-    color: 'var(--error-color)',
-    fontSize: theme.typography.pxToRem(14),
-    fontFamily: 'var(--font-stack-monospace)',
-    backgroundColor: 'var(--error-background)',
-    borderLeft: '2px solid var(--error-color)',
-    fontWeight: theme.typography.fontWeightBold,
-});
+    color: '#ff5555',
+    fontSize: 14,
+    fontFamily: MONO,
+    backgroundColor: '#2a1e1e',
+    borderLeft: '2px solid #ff5555',
+    fontWeight: 700,
+};
 
-const detailsStyles = (): CSSObject => ({
+const detailsStyle: React.CSSProperties = {
     margin: 0,
     padding: 16,
     lineHeight: 1.5,
     overflow: 'auto',
-    borderRadius: 'inherit',
-    color: 'var(--warning-color)',
-    backgroundColor: 'var(--details-background)',
-});
+    borderRadius: 8,
+    color: '#e2aa53',
+    backgroundColor: '#111111',
+    fontFamily: MONO,
+};
 
-const filePathStyles = (): CSSObject => ({
-    marginTop: 0,
-    color: 'var(--info-color)',
-});
-
-const inputGlobalStyles = () => (
-    <GlobalStyles
-        styles={(theme) => ({
-            body: {
-                ...cssVars,
-                margin: 0,
-                color: 'white',
-                backgroundColor: 'var(--root-background)',
-                [`& .${errorBoundaryClasses.root}`]: rootStyles(),
-                [`& .${errorBoundaryClasses.container}`]: contentStyles(),
-                [`& .${errorBoundaryClasses.title}`]: titleStyles(theme),
-                [`& .${errorBoundaryClasses.message}`]: messageStyles(theme),
-                [`& .${errorBoundaryClasses.filePath}`]: filePathStyles(),
-                [`& .${errorBoundaryClasses.details}`]: detailsStyles(),
-            },
-        })}
-    />
-);
+const filePathStyle: React.CSSProperties = { marginTop: 0, color: '#2dd9da' };

@@ -1,116 +1,220 @@
-import { useEffect } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Grid from '@mui/material/Grid';
-import Alert from '@mui/material/Alert';
+import ContentLayout from '@cloudscape-design/components/content-layout';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Box from '@cloudscape-design/components/box';
+import Badge from '@cloudscape-design/components/badge';
+import Spinner from '@cloudscape-design/components/spinner';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import Table from '@cloudscape-design/components/table';
+import LineChart from '@cloudscape-design/components/line-chart';
 
-import { DashboardContent } from 'src/layouts/dashboard';
-import { useSessionStore } from 'src/stores/session-store';
-import { useTopicStore } from 'src/stores/topic-store';
-import { useListenerStore } from 'src/stores/listener-store';
+import type { MetricsFrame } from 'src/types/metrics';
+import type { TopicInfo } from 'src/types/topics';
+import { useMetrics } from 'src/hooks/use-metrics';
 
-import StatCard from './stat_card';
-import RecentClients from './recent_clients';
-import TopicsOverview from './topics_overview';
+type ChartPoint = { x: number; y: number };
+
+function buildSeries(
+    history: MetricsFrame[],
+    pick: (f: MetricsFrame) => number,
+): ChartPoint[] {
+    return history.map((f, i) => ({ x: i, y: pick(f) }));
+}
 
 export default function HomeView() {
     const { t } = useTranslation();
+    const { latest, history, status } = useMetrics();
 
-    const sessionStore = useSessionStore();
-    const topicStore = useTopicStore();
-    const listenerStore = useListenerStore();
+    const liveIndicator = useMemo(() => {
+        if (status === 'open') return <StatusIndicator type="success">Live</StatusIndicator>;
+        if (status === 'connecting')
+            return <StatusIndicator type="loading">Connecting</StatusIndicator>;
+        return <StatusIndicator type="error">Disconnected</StatusIndicator>;
+    }, [status]);
 
-    useEffect(() => {
-        sessionStore.fetch(0, 5);
-        topicStore.fetch();
-        listenerStore.fetch();
-    }, []);
+    const clientCount = latest?.client_count ?? 0;
+    const topicCount = latest?.topics.length ?? 0;
+    const totalSubscriptions = useMemo(
+        () => (latest?.topics ?? []).reduce((sum, topic) => sum + topic.subscriber_count, 0),
+        [latest],
+    );
+    const cpuPercent = latest?.cpu_percent ?? 0;
+    const memoryMb = latest?.memory_mb ?? 0;
 
-    const error = sessionStore.error || topicStore.error || listenerStore.error;
-    const clearAllErrors = () => {
-        sessionStore.clearError();
-        topicStore.clearError();
-        listenerStore.clearError();
-    };
+    const cpuData = useMemo(() => buildSeries(history, (f) => f.cpu_percent), [history]);
+    const memoryData = useMemo(() => buildSeries(history, (f) => f.memory_mb), [history]);
+    const xDomain = useMemo<[number, number]>(
+        () => [0, Math.max(history.length - 1, 1)],
+        [history.length],
+    );
+
+    const topTopics = useMemo<TopicInfo[]>(
+        () =>
+            [...(latest?.topics ?? [])].sort(
+                (a, b) => b.subscriber_count - a.subscriber_count,
+            ),
+        [latest],
+    );
+
+    const chartStatus = history.length === 0 ? 'loading' : 'finished';
+    const chartEmpty = (
+        <Box textAlign="center" color="inherit" padding={{ vertical: 'l' }}>
+            <b>No data</b>
+            <Box variant="p" color="text-body-secondary">
+                Waiting for live metrics.
+            </Box>
+        </Box>
+    );
 
     return (
-        <DashboardContent maxWidth="xl">
-            <Box sx={{ py: 2, mb: 1 }}>
-                <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: '-0.01em' }}>
-                    {t('welcome')}
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                    CoreMQ MQTT Broker Admin Panel
-                </Typography>
-            </Box>
+        <ContentLayout
+            header={
+                <Header
+                    variant="h1"
+                    description="Real-time health of this MQTT broker, streamed live over the metrics WebSocket."
+                    actions={liveIndicator}
+                >
+                    Dashboard
+                </Header>
+            }
+        >
+            <SpaceBetween size="l">
+                <Container
+                    header={
+                        <Header
+                            variant="h2"
+                            description="Live broker metrics, refreshed once per second."
+                        >
+                            Broker health
+                        </Header>
+                    }
+                >
+                    {latest === null ? (
+                        <Box textAlign="center" padding={{ vertical: 'xxl' }}>
+                            <SpaceBetween size="s" alignItems="center">
+                                <Spinner size="large" />
+                                <Box variant="p" color="text-body-secondary">
+                                    Connecting to the live metrics stream…
+                                </Box>
+                            </SpaceBetween>
+                        </Box>
+                    ) : (
+                        <ColumnLayout columns={4} variant="text-grid">
+                            <div>
+                                <Box variant="awsui-key-label">Connected clients</Box>
+                                <Box variant="h1">{clientCount}</Box>
+                            </div>
+                            <div>
+                                <Box variant="awsui-key-label">Active topics</Box>
+                                <Box variant="h1">{topicCount}</Box>
+                            </div>
+                            <div>
+                                <Box variant="awsui-key-label">Total subscriptions</Box>
+                                <Box variant="h1">{totalSubscriptions}</Box>
+                            </div>
+                            <div>
+                                <Box variant="awsui-key-label">CPU usage</Box>
+                                <Box variant="h1">{cpuPercent.toFixed(1)}%</Box>
+                            </div>
+                            <div>
+                                <Box variant="awsui-key-label">Memory</Box>
+                                <Box variant="h1">
+                                    {memoryMb.toFixed(1)}{' '}
+                                    <Box variant="span" color="text-body-secondary" fontSize="heading-m">
+                                        MB
+                                    </Box>
+                                </Box>
+                            </div>
+                        </ColumnLayout>
+                    )}
+                </Container>
 
-            {error && (
-                <Alert severity="error" sx={{ mb: 3 }} onClose={clearAllErrors}>
-                    {error}
-                </Alert>
-            )}
+                <ColumnLayout columns={2}>
+                    <Container header={<Header variant="h2">CPU usage over time</Header>}>
+                        <LineChart
+                            series={[
+                                {
+                                    title: 'CPU %',
+                                    type: 'line',
+                                    data: cpuData,
+                                    valueFormatter: (value) => `${value.toFixed(1)}%`,
+                                },
+                            ]}
+                            xScaleType="linear"
+                            xDomain={xDomain}
+                            height={220}
+                            hideFilter
+                            hideLegend
+                            xTitle="Samples"
+                            yTitle="CPU %"
+                            statusType={chartStatus}
+                            loadingText="Waiting for live metrics"
+                            empty={chartEmpty}
+                            noMatch={chartEmpty}
+                        />
+                    </Container>
 
-            <Grid container spacing={2.5} sx={{ mb: 3 }}>
-                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <StatCard
-                        label="Connected Clients"
-                        value={sessionStore.loading ? null : sessionStore.totalElements}
-                        icon="lucide:users"
-                        color="#00A76F"
-                        trend="up"
-                        trendValue="Live"
-                        footer="Active connections"
-                        subtitle="Currently connected MQTT clients"
-                    />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <StatCard
-                        label="Active Topics"
-                        value={topicStore.loading ? null : topicStore.topics.length}
-                        icon="lucide:hash"
-                        color="#00B8D9"
-                        trend="neutral"
-                        trendValue="Topics"
-                        footer="With subscribers"
-                        subtitle="Topics with at least one subscriber"
-                    />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <StatCard
-                        label="Total Subscriptions"
-                        value={topicStore.loading ? null : topicStore.totalSubscriptions}
-                        icon="lucide:bell-ring"
-                        color="#FFAB00"
-                        trend="up"
-                        trendValue="Active"
-                        footer="Across all topics"
-                        subtitle="Sum of all topic subscriptions"
-                    />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                    <StatCard
-                        label="Active Listeners"
-                        value={listenerStore.loading ? null : listenerStore.listeners.length}
-                        icon="lucide:radio-tower"
-                        color="#FF5630"
-                        trend="neutral"
-                        trendValue="Ports"
-                        footer="TCP / WS / TLS"
-                        subtitle="Running transport listeners"
-                    />
-                </Grid>
-            </Grid>
+                    <Container header={<Header variant="h2">Memory usage over time</Header>}>
+                        <LineChart
+                            series={[
+                                {
+                                    title: 'Memory MB',
+                                    type: 'line',
+                                    data: memoryData,
+                                    valueFormatter: (value) => `${value.toFixed(1)} MB`,
+                                },
+                            ]}
+                            xScaleType="linear"
+                            xDomain={xDomain}
+                            height={220}
+                            hideFilter
+                            hideLegend
+                            xTitle="Samples"
+                            yTitle="Memory (MB)"
+                            statusType={chartStatus}
+                            loadingText="Waiting for live metrics"
+                            empty={chartEmpty}
+                            noMatch={chartEmpty}
+                        />
+                    </Container>
+                </ColumnLayout>
 
-            <Grid container spacing={2.5}>
-                <Grid size={{ xs: 12, md: 7 }}>
-                    <RecentClients sessions={sessionStore.loading ? null : sessionStore.sessions} />
-                </Grid>
-                <Grid size={{ xs: 12, md: 5 }}>
-                    <TopicsOverview topics={topicStore.loading ? null : topicStore.topics} />
-                </Grid>
-            </Grid>
-        </DashboardContent>
+                <Table<TopicInfo>
+                    variant="container"
+                    header={
+                        <Header variant="h2" counter={`(${topTopics.length})`}>
+                            Top topics
+                        </Header>
+                    }
+                    items={topTopics}
+                    trackBy="topic"
+                    columnDefinitions={[
+                        {
+                            id: 'topic',
+                            header: t('topics.topic'),
+                            cell: (topic) => <Box variant="samp">{topic.topic}</Box>,
+                        },
+                        {
+                            id: 'subscribers',
+                            header: t('topics.subscribers'),
+                            cell: (topic) => <Badge color="blue">{topic.subscriber_count}</Badge>,
+                        },
+                    ]}
+                    empty={
+                        <Box textAlign="center" color="inherit" padding={{ vertical: 'l' }}>
+                            <SpaceBetween size="xs">
+                                <b>No topics</b>
+                                <span>No topics currently have subscribers.</span>
+                            </SpaceBetween>
+                        </Box>
+                    }
+                />
+            </SpaceBetween>
+        </ContentLayout>
     );
 }

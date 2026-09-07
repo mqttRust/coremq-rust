@@ -11,8 +11,14 @@ pub struct Token {
 
 #[derive(Serialize, Deserialize)]
 pub struct Login {
-    pub username: String, 
+    pub username: String,
     pub password: String
+}
+
+
+#[derive(Serialize, Deserialize)]
+pub struct RefreshRequest {
+    pub refresh_token: String,
 }
 
 

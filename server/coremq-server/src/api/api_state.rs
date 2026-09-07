@@ -5,7 +5,7 @@ use casbin::Enforcer;
 use serde::Serialize;
 use tokio::sync::mpsc;
 
-use crate::{engine::AdminCommand, services::jwt::JwtService, storage::redb::Storage};
+use crate::{cluster::ClusterHandle, engine::AdminCommand, services::{jwt::JwtService, webhook::WebhookDispatcher, auth::AuthService}, storage::redb::Storage};
 
 #[derive(Clone)]
 pub struct ApiState {
@@ -14,6 +14,11 @@ pub struct ApiState {
     pub storage: Arc<Storage>,
     pub engine: mpsc::UnboundedSender<AdminCommand>,
     pub packet_id_counter: Arc<AtomicU16>,
+    pub webhook: Arc<WebhookDispatcher>,
+    pub auth: Arc<AuthService>,
+
+    /* None when clustering is disabled; the cluster endpoints then report so. */
+    pub cluster: Option<ClusterHandle>,
 }
 
 impl ApiState {

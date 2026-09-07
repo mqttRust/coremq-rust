@@ -25,6 +25,7 @@ impl SessionService {
         packet: &ConnectPacket,
         connected_port: u16,
         remote_addr: SocketAddr,
+        node_id: String,
         tx: mpsc::Sender<MqttChannel>,
     ) {
         let session = Session::new(
@@ -33,6 +34,7 @@ impl SessionService {
             packet.clean_session,
             connected_port,
             remote_addr,
+            node_id,
             tx,
         );
 
@@ -69,6 +71,16 @@ impl SessionService {
 
     pub fn client_count(&self) -> usize {
         self.sessions.len()
+    }
+
+    /*
+      Snapshot of every local session.
+
+      Collects eagerly so the DashMap iterator guard is dropped before the caller
+      can hit an await point.
+    */
+    pub fn all_sessions(&self) -> Vec<Session> {
+        self.sessions.iter().map(|r| r.value().clone()).collect()
     }
 
     pub fn get_paginated(&self, page: usize, size: usize) -> Page<Session> {

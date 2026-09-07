@@ -3,8 +3,9 @@ use std::net::SocketAddr;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
+    cluster::Origin,
     enums::MqttChannel,
-    models::{ listener::ListenerConfig, pagination::Page, session::Session, topic_info::TopicInfo},
+    models::{ listener::ListenerConfig, listener_status::ListenerStatus, pagination::Page, session::Session, topic_info::TopicInfo},
     protocol::packets::{ConnectPacket, PublishPacket, SubscribePacket, UnsubscribePacket}
 };
 
@@ -17,17 +18,30 @@ pub struct EngineChannels {
 pub enum ConnectCommand {
     Connect(ConnectPacket, u16, SocketAddr, mpsc::Sender<MqttChannel>),
     Disconnect(String),
+
+    /*
+      Another node claimed this client id. MQTT requires cluster-wide uniqueness,
+      so our copy is disconnected and dropped.
+    */
+    Takeover(String),
 }
 
 pub enum PubSubCommand {
     Subscribe(SubscribePacket, String),
     Unsubscribe(UnsubscribePacket, String),
-    Publish(PublishPacket),
+
+    /*
+      Origin decides whether this publish is forwarded onward. A message that
+      arrived from a peer has already been fanned out by its origin node, so
+      re-forwarding it would loop.
+    */
+    Publish(PublishPacket, Origin),
 }
 
 pub enum AdminCommand {
     GetClients(oneshot::Sender<Page<Session>>, usize, usize),
-    GetListeners(oneshot::Sender<Vec<ListenerConfig>>),
+    GetListeners(oneshot::Sender<Vec<ListenerStatus>>),
+    StartListener(ListenerConfig, oneshot::Sender<Result<(), String>>),
     StopListener(u16),
     DisconnectClient(String, oneshot::Sender<bool>),
 

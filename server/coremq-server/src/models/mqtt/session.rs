@@ -17,6 +17,13 @@ pub struct Session {
     pub remote_addr: SocketAddr,
     pub connected_port: u16,
 
+    /*
+      Which node owns this session. Blank on a single-node broker; the dashboard
+      shows it as a column once clustering is on.
+    */
+    #[serde(default)]
+    pub node_id: String,
+
     #[serde(serialize_with = "format_datetime")]
     pub connected_at: DateTime<Local>,
     pub subscriptions: HashMap<String, SubscribePacket>,
@@ -32,6 +39,7 @@ impl Session {
         clean_session: bool,
         connected_port: u16,
         remote_addr: SocketAddr,
+        node_id: String,
         tx: mpsc::Sender<MqttChannel>,
     ) -> Self {
         Self {
@@ -39,6 +47,7 @@ impl Session {
             username,
             clean_session,
             connected_port,
+            node_id,
             connected_at: Local::now(),
             subscriptions: HashMap::new(),
             remote_addr,
